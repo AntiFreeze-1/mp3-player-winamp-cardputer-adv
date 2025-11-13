@@ -12,6 +12,21 @@ This project is adapted from the original **M5Mp3** by [VolosR](https://github.c
 
 Many thanks to VolosR for creating the original Winamp-style interface and audio playback implementation! This adaptation adds support for M5Stack Cardputer-Adv with ES8311 audio codec.
 
+## 📸 Screenshots
+
+_Add your screenshots here! Place them in `screenshots/` folder and update this section._
+
+<!--
+### Main Interface
+![Main Interface](screenshots/main_interface.jpg)
+
+### Playing Track
+![Playing Track](screenshots/playing_track.jpg)
+
+### File Browser
+![File Browser](screenshots/file_browser.jpg)
+-->
+
 ## ✨ Features
 
 - ✅ **Winamp-style interface** - Classic retro look
