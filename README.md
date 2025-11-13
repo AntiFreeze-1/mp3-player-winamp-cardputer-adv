@@ -14,18 +14,10 @@ Many thanks to VolosR for creating the original Winamp-style interface and audio
 
 ## 📸 Screenshots
 
-_Add your screenshots here! Place them in `screenshots/` folder and update this section._
-
-<!--
 ### Main Interface
-![Main Interface](screenshots/main_interface.jpg)
+![Main Interface](screenshots/2025-11-13%2016.40.08.jpg)
 
-### Playing Track
-![Playing Track](screenshots/playing_track.jpg)
-
-### File Browser
-![File Browser](screenshots/file_browser.jpg)
--->
+Winamp-style MP3 player running on M5Stack Cardputer-Adv
 
 ## ✨ Features
 
