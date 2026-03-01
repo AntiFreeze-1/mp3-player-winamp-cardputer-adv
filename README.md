@@ -31,17 +31,27 @@ Winamp-style MP3 player running on M5Stack Cardputer-Adv
 - ✅ **Visual equalizer** - Animated bars
 - ✅ **FreeRTOS tasks** - Separate TFT and Audio tasks
 
+## ⚠️ Important: Library Version Compatibility
+
+**ESP8266Audio 2.0+ is NOT compatible** with the standard M5Stack Arduino board package (ESP-IDF 4.4).
+You will get `fatal error: driver/i2s_std.h: No such file or directory` if you install the latest version.
+
+**You MUST use ESP8266Audio version 1.9.7.**
+
+See [LIBRARY_VERSIONS.md](LIBRARY_VERSIONS.md) for detailed installation instructions.
+
 ## 📦 Required Libraries
 
-Install via Arduino Library Manager or PlatformIO:
+Install via Arduino Library Manager:
 
-1. **ESP8266Audio** - MP3 decoder
-   - URL: https://github.com/earlephilhower/ESP8266Audio
-   - Version: Latest
+| Library | Version | Notes |
+|---------|---------|-------|
+| **ESP8266Audio** | **1.9.7** (NOT 2.x!) | [Install guide](LIBRARY_VERSIONS.md) |
+| **M5Cardputer** | 1.1.1+ | Board support package |
+| **M5Unified** | 0.2.10+ | Auto-installed with M5Cardputer |
+| **M5GFX** | 0.2.17+ | Auto-installed with M5Cardputer |
 
-2. **M5Cardputer** - Already installed
-
-3. ~~**ESP32Time**~~ - Not required (replaced with simple millis() based timer)
+~~**ESP32Time**~~ - Not required (replaced with simple millis() based timer)
 
 ## 🎮 Controls
 
@@ -151,6 +161,22 @@ Install via Arduino Library Manager or PlatformIO:
 ## 📄 License
 
 Same as original M5Mp3 project.
+
+## 📋 Changelog
+
+### v1.1.0 (2026-03-01)
+- **Fixed:** Compilation error with ESP8266Audio 2.x (`driver/i2s_std.h` missing)
+  - Root cause: ESP8266Audio 2.0+ requires ESP-IDF 5.x I2S API, incompatible with M5Stack board package
+  - Solution: Pin ESP8266Audio to version 1.9.7
+- **Fixed:** `setFreeFont()` deprecation warning in newer M5GFX versions (replaced with `setFont()`)
+- **Added:** `LIBRARY_VERSIONS.md` with detailed version compatibility guide
+- **Updated:** README with library version requirements
+
+### v1.0.0 (Initial Release)
+- Adapted from original M5Mp3 by VolosR
+- ESP8266Audio instead of ESP32-audioI2S
+- Custom AudioOutput for M5Cardputer.Speaker (ES8311)
+- FreeRTOS dual-core architecture
 
 ## 🎯 Future Improvements
 

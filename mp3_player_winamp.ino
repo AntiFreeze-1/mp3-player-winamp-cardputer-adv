@@ -364,7 +364,7 @@ void draw() {
         }
 
         sprite.setTextColor(GREEN, BLACK); 
-        sprite.setFreeFont(&DSEG7_Classic_Mini_Regular_16);
+        sprite.setFont(&DSEG7_Classic_Mini_Regular_16);
         if (!stoped) {
             // Update elapsed time
             if (trackStartTime > 0) {

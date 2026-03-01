@@ -6,6 +6,11 @@ build/
 .vscode/
 .idea/
 
+# PlatformIO
+.pio/
+src/
+platformio.ini
+
 # OS
 .DS_Store
 Thumbs.db
@@ -16,4 +21,5 @@ Thumbs.db
 # Temporary files
 *~
 *.tmp
+*.backup
 
