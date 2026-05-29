@@ -2,6 +2,7 @@
 *.hex
 *.elf
 *.bin
+!Winamp.bin
 build/
 .vscode/
 .idea/
