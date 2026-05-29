@@ -455,15 +455,15 @@ void Task_TFT(void *pvParameters) {
 
             if (M5Cardputer.Keyboard.isKeyPressed(';')) {
                 n--;
-                if (n >= fileCount)
-                    n = 0;
-            } 
+                if (n < 0)
+                    n = fileCount - 1;
+            }
 
             if (M5Cardputer.Keyboard.isKeyPressed('.')) {
                 n++;
-                if (n < 0) 
-                    n = fileCount - 1;
-            } 
+                if (n >= fileCount)
+                    n = 0;
+            }
 
             if (M5Cardputer.Keyboard.isKeyPressed(KEY_ENTER)) {
                 resetClock();
@@ -568,15 +568,22 @@ void listFiles(fs::FS &fs, const char *dirname, uint8_t levels) {
             Serial.print("DIR : ");
             Serial.println(file.name());
             if (levels) {
-                listFiles(fs, file.name(), levels - 1);
+                String subdirPath = String(dirname);
+                if (!subdirPath.endsWith("/")) subdirPath += "/";
+                subdirPath += file.name();
+                listFiles(fs, subdirPath.c_str(), levels - 1);
             }
         } else {
-            String filename = file.name();
+            String filename = String(file.name());
             filename.toLowerCase();
             if (filename.endsWith(".mp3")) {
+                String fullPath = String(dirname);
+                if (!fullPath.endsWith("/")) fullPath += "/";
+                fullPath += file.name();
+                if (!fullPath.startsWith("/")) fullPath = "/" + fullPath;
                 Serial.print("FILE: ");
-                Serial.println(file.name());
-                audioFiles[fileCount] = "/" + String(file.name());
+                Serial.println(fullPath);
+                audioFiles[fileCount] = fullPath;
                 fileCount++;
             }
         }
