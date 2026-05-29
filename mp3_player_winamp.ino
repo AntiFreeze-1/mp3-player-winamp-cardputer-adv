@@ -84,7 +84,7 @@ public:
             // Wait for previous playback to finish (non-blocking check)
             uint32_t waitCount = 0;
             while (_m5sound->isPlaying() && waitCount < 1000) {
-                vTaskDelay(1 / portTICK_PERIOD_MS);
+                vTaskDelay(pdMS_TO_TICKS(1));
                 waitCount++;
             }
             // playRaw(buffer, size, sampleRate, stereo=false for mono)
@@ -243,6 +243,7 @@ void loop() {
 }
 
 void draw() {
+    int drawN = n;  // snapshot: Task_Audio can modify n concurrently on Core 1
     if (graphSpeed == 0) {
         gray = grays[15];
         light = grays[11];
@@ -251,7 +252,7 @@ void draw() {
 
         sprite.fillRect(129, 8, 5, 122, 0x0841);
 
-        sliderPos = map(n, 0, fileCount, 8, 110);
+        sliderPos = map(drawN, 0, fileCount, 8, 110);
         sprite.fillRect(129, sliderPos, 5, 20, grays[2]);
         sprite.fillRect(131, sliderPos + 4, 1, 12, grays[16]);
 
@@ -321,21 +322,21 @@ void draw() {
         sprite.setTextFont(0);
         sprite.setTextDatum(0);
 
-        if (n < 5) {
+        if (drawN < 5) {
             for (int i = 0; i < 10; i++) {
-                if (i == n) sprite.setTextColor(WHITE, BLACK); 
-                else sprite.setTextColor(GREEN, BLACK); 
+                if (i == drawN) sprite.setTextColor(WHITE, BLACK);
+                else sprite.setTextColor(GREEN, BLACK);
                 if (i < fileCount)
                     sprite.drawString(audioFiles[i].substring(1, 20), 8, 10 + (i * 12));
             }
         }
 
         int yos = 0;
-        if (n >= 5) {
-            for (int i = n - 5; i < n - 5 + 10; i++) {
-                if (i == n) sprite.setTextColor(WHITE, BLACK); 
-                else sprite.setTextColor(GREEN, BLACK); 
-                if (i < fileCount)
+        if (drawN >= 5) {
+            for (int i = drawN - 5; i < drawN - 5 + 10; i++) {
+                if (i == drawN) sprite.setTextColor(WHITE, BLACK);
+                else sprite.setTextColor(GREEN, BLACK);
+                if (i >= 0 && i < fileCount)
                     sprite.drawString(audioFiles[i].substring(1, 20), 8, 10 + (yos * 12));
                 yos++;
             }
@@ -399,8 +400,8 @@ void draw() {
         
         spr.fillSprite(BLACK);
         spr.setTextColor(GREEN, BLACK);
-        if (!stoped && n < fileCount)  
-            spr.drawString(audioFiles[n].substring(1, audioFiles[n].length()), textPos, 4);
+        if (!stoped && drawN < fileCount)
+            spr.drawString(audioFiles[drawN].substring(1, audioFiles[drawN].length()), textPos, 4);
         textPos = textPos - 2; 
         if (textPos < -300) textPos = 90;
         spr.pushSprite(&sprite, 148, 59);
@@ -423,11 +424,10 @@ void Task_TFT(void *pvParameters) {
             }
 
             if (M5Cardputer.Keyboard.isKeyPressed('v')) {
-                isPlaying = false;
                 volUp = true;
                 volume = volume + 5;
                 if (volume > 20) volume = 5;
-            } 
+            }
 
             if (M5Cardputer.Keyboard.isKeyPressed('l')) {
                 bri++; 
@@ -437,21 +437,23 @@ void Task_TFT(void *pvParameters) {
             
             if (M5Cardputer.Keyboard.isKeyPressed('n')) {
                 resetClock();
-                isPlaying = false;
+                stoped = false;
+                isPlaying = true;
                 textPos = 90;
                 n++;
                 if (n >= fileCount) n = 0;
                 nextS = 1;
-            } 
+            }
 
             if (M5Cardputer.Keyboard.isKeyPressed('p')) {
                 resetClock();
-                isPlaying = false;
+                stoped = false;
+                isPlaying = true;
                 textPos = 90;
                 n--;
                 if (n < 0) n = fileCount - 1;
                 nextS = 1;
-            } 
+            }
 
             if (M5Cardputer.Keyboard.isKeyPressed(';')) {
                 n--;
@@ -475,11 +477,12 @@ void Task_TFT(void *pvParameters) {
 
             if (M5Cardputer.Keyboard.isKeyPressed('b')) {
                 resetClock();
-                isPlaying = false;
+                stoped = false;
+                isPlaying = true;
                 textPos = 90;
                 n = random(0, fileCount);
                 nextS = 1;
-            } 
+            }
         }
         draw();  
         vTaskDelay(40 / portTICK_PERIOD_MS);
@@ -492,10 +495,8 @@ void Task_Audio(void *pvParameters) {
             if (audioOut) {
                 audioOut->SetGain((float)volume / 21.0f);
             }
-            // Also set M5.Speaker volume (0-255)
             uint8_t m5Volume = map(volume, 0, 21, 0, 255);
             M5Cardputer.Speaker.setVolume(m5Volume);
-            isPlaying = 1;
             volUp = 0;
         }
 
@@ -503,6 +504,10 @@ void Task_Audio(void *pvParameters) {
             // Stop current playback
             if (audioMp3 && audioMp3->isRunning()) {
                 audioMp3->stop();
+            }
+            if (audioMp3) {
+                delete audioMp3;
+                audioMp3 = nullptr;
             }
             if (audioId3) {
                 delete audioId3;
