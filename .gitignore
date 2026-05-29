@@ -3,6 +3,7 @@
 *.elf
 *.bin
 !Winamp.bin
+!Winamp_merged.bin
 build/
 .vscode/
 .idea/
