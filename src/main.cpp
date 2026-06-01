@@ -7,6 +7,7 @@
 #include <freertos/task.h>
 #include <freertos/queue.h>
 #include <freertos/semphr.h>
+#include <esp_system.h>
 
 #include "config.h"
 #include "types.h"
@@ -32,6 +33,33 @@ static int g_shuffle_order[LIBRARY_MAX_TRACKS];
 static int g_shuffle_pos = 0;
 static int g_queue[LIBRARY_MAX_TRACKS];
 static int g_queue_len = 0;
+
+// ── Boot diagnostics ───────────────────────────────────────────────────────
+// A crash breadcrumb stored in RTC memory, which survives a software reset.
+// If the device reboot-loops, the next boot reads the last stage we reached
+// and shows it on screen (no serial cable required).
+#define BOOT_MAGIC 0xB007C0DEu
+RTC_NOINIT_ATTR static uint32_t g_boot_magic;
+RTC_NOINIT_ATTR static char     g_boot_last_stage[40];
+static int g_boot_line = 0;
+
+// Update the breadcrumb only — safe to call from any task.
+static void markStage(const char* stage) {
+    strncpy(g_boot_last_stage, stage, sizeof(g_boot_last_stage) - 1);
+    g_boot_last_stage[sizeof(g_boot_last_stage) - 1] = '\0';
+    g_boot_magic = BOOT_MAGIC;
+    Serial.printf("[BOOT] %s\n", stage);
+}
+
+// Update the breadcrumb AND print it to the display (use during setup only,
+// before the UI task owns the screen).
+static void bootStage(const char* stage) {
+    markStage(stage);
+    M5.Display.setTextColor(TFT_GREEN, TFT_BLACK);
+    M5.Display.setCursor(4, 4 + g_boot_line * 12);
+    M5.Display.print(stage);
+    g_boot_line++;
+}
 
 // ── Helper: build playback queue from library ──────────────────────────────
 static void buildQueue(bool shuffle) {
@@ -293,9 +321,9 @@ static void handleKey(const KeyEvent& ev, AppState& state) {
 
 // ── Audio task (Core 1, priority 5) ───────────────────────────────────────
 static void audioTask(void* arg) {
-    Serial.println("[TASK] audio begin");
+    markStage("audio: begin");
     AudioEngine::begin();
-    Serial.println("[TASK] audio ready");
+    markStage("audio: ready");
 
     for (;;) {
         AudioEngine::loop();
@@ -340,9 +368,9 @@ static void audioTask(void* arg) {
 
 // ── Keyboard task (Core 0, priority 4) ────────────────────────────────────
 static void keyboardTask(void* arg) {
-    Serial.println("[TASK] keyboard begin");
+    markStage("kbd: begin");
     TCA8418::begin();
-    Serial.println("[TASK] keyboard ready");
+    markStage("kbd: ready");
 
     for (;;) {
         if (TCA8418::available()) {
@@ -364,9 +392,9 @@ static void keyboardTask(void* arg) {
 
 // ── UI task (Core 0, priority 3) ──────────────────────────────────────────
 static void uiTask(void* arg) {
-    Serial.println("[TASK] ui begin");
+    markStage("ui: begin");
     UIManager::begin();
-    Serial.println("[TASK] ui ready");
+    markStage("ui: ready");
 
     for (;;) {
         // Process key events
@@ -423,14 +451,42 @@ void setup() {
     auto cfg = M5.config();
     M5.begin(cfg);
 
-    // Serial over USB-CDC for boot diagnostics. If the device reboot-loops,
-    // open a serial monitor at 115200 to see which stage logged last.
     Serial.begin(115200);
-    delay(300);   // allow USB CDC to enumerate
-    Serial.println("\n[BOOT] M5 init OK");
+    delay(200);
+
+    // Prepare the screen for on-device boot diagnostics.
+    M5.Display.setRotation(1);
+    M5.Display.fillScreen(TFT_BLACK);
+    M5.Display.setTextSize(1);
+
+    // If the previous boot crashed (breadcrumb intact + crash-type reset),
+    // show which stage it died at. This survives a reboot loop, so it stays
+    // readable across resets without any serial connection.
+    esp_reset_reason_t rr = esp_reset_reason();
+    bool crashed = (g_boot_magic == BOOT_MAGIC) &&
+                   (rr == ESP_RST_PANIC || rr == ESP_RST_TASK_WDT ||
+                    rr == ESP_RST_INT_WDT || rr == ESP_RST_WDT ||
+                    rr == ESP_RST_BROWNOUT);
+    if (crashed) {
+        M5.Display.fillScreen(TFT_RED);
+        M5.Display.setTextColor(TFT_WHITE, TFT_RED);
+        M5.Display.setCursor(4, 4);
+        M5.Display.println("CRASH after stage:");
+        M5.Display.setTextSize(2);
+        M5.Display.println(g_boot_last_stage);
+        M5.Display.setTextSize(1);
+        M5.Display.printf("\nreset reason = %d\n", (int)rr);
+        M5.Display.println("\n(holding 6s so you can read it)");
+        delay(6000);
+        M5.Display.fillScreen(TFT_BLACK);
+    }
+    g_boot_magic = 0;        // cleared; each stage re-arms it
+    g_boot_line  = 0;
+
+    bootStage("M5 init OK");
 
     Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL, I2C_FREQ_HZ);
-    Serial.println("[BOOT] I2C init OK");
+    bootStage("I2C init OK");
 
     // Mount SD card. The SPI bus pins must be set explicitly — the Arduino
     // defaults are wrong for this board, which presents as a mount failure
@@ -449,8 +505,6 @@ void setup() {
             vTaskDelay(pdMS_TO_TICKS(100));
         }
     }
-    Serial.printf("[BOOT] SD mount %s\n", sd_ok ? "OK" : "FAILED");
-
     if (!sd_ok) {
         M5.Display.fillScreen(TFT_RED);
         M5.Display.setTextColor(TFT_WHITE, TFT_RED);
@@ -458,6 +512,7 @@ void setup() {
         M5.Display.drawString("Check card seated / FAT32", 10, 50);
         while (true) vTaskDelay(1000);
     }
+    bootStage("SD mount OK");
 
     // Create synchronisation primitives
     g_state_mutex = xSemaphoreCreateMutex();
@@ -480,9 +535,9 @@ void setup() {
     g_state.muted           = false;
 
     // Scan library
-    Serial.println("[BOOT] scanning SD library...");
+    bootStage("scanning SD...");
     g_lib.scan();
-    Serial.printf("[BOOT] library scan done: %d tracks\n", g_lib.count());
+    { char m[40]; snprintf(m, sizeof(m), "scan done: %d tracks", g_lib.count()); bootStage(m); }
     buildQueue(g_state.shuffle);
 
     // Apply persisted EQ/DSP before audio starts
@@ -504,12 +559,17 @@ void setup() {
     }
 
     // Spawn tasks
-    Serial.println("[BOOT] starting tasks");
+    bootStage("starting tasks");
     xTaskCreatePinnedToCore(audioTask,    "AudioTask", AUDIO_TASK_STACK, nullptr, 5, nullptr, 1);
     xTaskCreatePinnedToCore(keyboardTask, "KbdTask",   KBD_TASK_STACK,   nullptr, 4, nullptr, 0);
     xTaskCreatePinnedToCore(uiTask,       "UITask",    UI_TASK_STACK,    nullptr, 3, nullptr, 0);
     xTaskCreatePinnedToCore(recorderTask, "RecTask",   REC_TASK_STACK,   nullptr, 4, nullptr, 1);
     xTaskCreatePinnedToCore(batteryTask,  "BatTask",   BAT_TASK_STACK,   nullptr, 1, nullptr, 0);
+
+    // A clean boot leaves "running" as the last breadcrumb; if a task later
+    // crashes it overwrites this with its own stage before the reset.
+    delay(50);
+    markStage("running");
 }
 
 void loop() {

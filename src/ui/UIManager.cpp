@@ -6,8 +6,10 @@
 #include "../config.h"
 #include "../battery/BatteryMonitor.h"
 
-M5GFX   UIManager::display;
-M5Canvas UIManager::canvas(&UIManager::display);
+// Render into a sprite parented to M5's single display instance (M5.Display).
+// Creating a second M5GFX here and begin()-ing it would re-init a panel the
+// M5 library already owns.
+M5Canvas UIManager::canvas(&M5.Display);
 bool     UIManager::s_art_loaded = false;
 char     UIManager::s_notif[64] = {0};
 uint32_t UIManager::s_notif_until = 0;
@@ -28,9 +30,9 @@ static constexpr uint16_t COL_RED      = 0xF800;
 static constexpr uint16_t COL_YELLOW   = 0xFFE0;
 
 void UIManager::begin() {
-    display.begin();
-    display.setRotation(1);
-    display.fillScreen(COL_BG);
+    // M5.begin() already initialised the panel; just set orientation here.
+    M5.Display.setRotation(1);
+    M5.Display.fillScreen(COL_BG);
     canvas.createSprite(W, H);
     canvas.setTextColor(COL_FG, COL_BG);
     canvas.setTextSize(1);
@@ -372,7 +374,7 @@ void UIManager::loadAlbumArt(const char* track_path, bool has_embedded) {
 
     if (read == len) {
         // Scale to fit a 100×(H-14) square in the upper-left of the now-playing view.
-        display.drawJpg(buf, len, 0, 14, 100, H - 14);
+        M5.Display.drawJpg(buf, len, 0, 14, 100, H - 14);
         s_art_loaded = true;
     }
     free(buf);

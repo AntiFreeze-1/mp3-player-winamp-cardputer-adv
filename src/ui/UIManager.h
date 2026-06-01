@@ -23,8 +23,6 @@ public:
     // Notification popup (auto-clears after ~1.5s)
     static void showNotif(const char* text);
 
-    static M5GFX display;
-
 private:
     static M5Canvas canvas;    // off-screen framebuffer
 
