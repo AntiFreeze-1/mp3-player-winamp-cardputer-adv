@@ -1,76 +1,43 @@
 #pragma once
-#include "../types.h"
-#include "../config.h"
 #include <SD.h>
 
-enum class BrowseMode : uint8_t {
-    ALL_SONGS = 0,
-    BY_ARTIST,
-    BY_ALBUM,
-    BY_FOLDER,
-    RECORDINGS,
-    FAVORITES,
-    RECENTLY_ADDED,
-    GENRE,
-};
-
+// File-browser backed "library" — no pre-scan, no heap allocation.
+// Reads one directory at a time; user navigates folders to find tracks.
 class Library {
 public:
+    static constexpr int MAX_ENTRIES = 64;
+
+    struct Entry {
+        char name[56];   // filename only (no path prefix)
+        bool is_dir;
+    };
+
     Library();
 
-    // Scan SD card and populate track index
-    bool scan();
+    void begin(const char* root = "/");
+    void refresh();                          // re-read current directory
 
-    // Track count
-    int  count() const { return m_count; }
-    const TrackInfo& track(int idx) const;
+    int          count()       const { return m_count; }
+    const Entry& entry(int i)  const;
+    const char*  currentPath() const { return m_path; }
 
-    // Browse / filter
-    void        setBrowseMode(BrowseMode mode);
-    BrowseMode  browseMode() const { return m_mode; }
+    bool enterDir(int idx);                  // descend into directory at idx
+    void goUp();                             // ascend to parent
 
-    // Returns filtered list indices for the current browse mode
-    // Caller provides a pre-allocated buffer
-    int  getFiltered(int* out_indices, int max_count, const char* filter = nullptr) const;
+    bool getFullPath(int idx, char* out, size_t out_size) const;
+    bool isAudioFile(int idx) const;
 
-    // Genre groups
-    int  genreCount() const { return m_genre_count; }
-    const char* genreName(int idx) const;
-    int  getByGenre(int genre_idx, int* out_indices, int max_count) const;
-
-    // Artist / Album helpers
-    int  artistCount() const { return m_artist_count; }
-    const char* artistName(int idx) const;
-    int  getByArtist(int artist_idx, int* out_indices, int max_count) const;
-
-    int  albumCount() const { return m_album_count; }
-    const char* albumName(int idx) const;
-    int  getByAlbum(int album_idx, int* out_indices, int max_count) const;
-
-    // Shuffle support
-    void buildShuffleOrder(int* order, int count) const;
-
-    // Find track index by path
-    int  findByPath(const char* path) const;
-
-    // Recently added
-    int  getRecentlyAdded(int* out_indices, int max_count) const;
+    // Returns the full path of the next (dir>0) or previous (dir<0) audio
+    // file in the current listing relative to `current_path`. Returns false
+    // if there is no adjacent audio file.
+    bool getAdjacentTrack(const char* current_path, int dir,
+                          char* out, size_t out_size) const;
 
 private:
-    void scanDir(File& dir, int depth);
-    void parseID3v2(const char* path, TrackInfo& info);
-    void parseVorbisComment(const char* path, TrackInfo& info);
-    void indexArtistsAlbums();
+    char  m_path[128];
+    Entry m_entries[MAX_ENTRIES];
+    int   m_count;
 
-    TrackInfo* m_tracks = nullptr;
-    int        m_count = 0;
-    BrowseMode m_mode = BrowseMode::ALL_SONGS;
-
-    // Unique artist/album/genre strings (pointers into track data)
-    const char* m_artists[128];
-    int         m_artist_count = 0;
-    const char* m_albums[128];
-    int         m_album_count = 0;
-    const char* m_genres[32];
-    int         m_genre_count = 0;
+    void loadEntries();
+    static bool isAudioExt(const char* name);
 };

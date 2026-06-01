@@ -2,17 +2,6 @@
 #include <stdint.h>
 #include <Arduino.h>
 
-// ── Track metadata ─────────────────────────────────────────────────────────
-struct TrackInfo {
-    char path[128];
-    char title[48];
-    char artist[48];
-    char album[48];
-    uint8_t  track_num;
-    uint32_t duration_ms;
-    bool     has_art;
-};
-
 // ── Playback state ─────────────────────────────────────────────────────────
 enum class PlaybackState : uint8_t {
     STOPPED = 0,
@@ -93,7 +82,8 @@ struct AppState {
     int           battery_pct;     // 0–100
     bool          charging;
     Screen        current_screen;
-    int           lib_cursor;      // cursor position in library list
-    int           current_track_idx;
+    int           lib_cursor;      // cursor position in browser list
+    char          current_track_path[128]; // full SD path of current track
+    char          current_track_name[48];  // display name (filename, no ext)
     uint32_t      track_pos_ms;    // current playback position
 };

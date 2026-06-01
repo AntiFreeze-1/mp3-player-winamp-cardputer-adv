@@ -52,7 +52,7 @@ private:
     static bool         s_muted;
     static bool         s_eof;
     static uint32_t     s_position_ms;
-    static char         s_current_path[256];
+    static char         s_current_path[128];
 
     // Map software volume 0-30 to ES8311 DAC value
     static uint8_t volToI2S(uint8_t vol);

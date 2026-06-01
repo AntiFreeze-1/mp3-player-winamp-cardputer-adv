@@ -28,7 +28,7 @@ void NVSConfig::load(AppState& state, char* last_track_out, uint32_t* last_pos_m
 
     // Last track + position for resume
     if (last_track_out) {
-        prefs.getString("last_track", last_track_out, 256);
+        prefs.getString("last_track", last_track_out, 128);
     }
     if (last_pos_ms_out) {
         *last_pos_ms_out = prefs.getULong("last_pos_ms", 0);

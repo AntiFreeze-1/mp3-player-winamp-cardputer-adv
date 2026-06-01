@@ -2,35 +2,30 @@
 #include <M5Unified.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include "../config.h"
 #include "../battery/BatteryMonitor.h"
 
-// Render into a sprite parented to M5's single display instance (M5.Display).
-// Creating a second M5GFX here and begin()-ing it would re-init a panel the
-// M5 library already owns.
 M5Canvas UIManager::canvas(&M5.Display);
-bool     UIManager::s_art_loaded = false;
-bool     UIManager::s_canvas_ok  = false;
-char     UIManager::s_notif[64] = {0};
+bool     UIManager::s_art_loaded  = false;
+bool     UIManager::s_canvas_ok   = false;
+char     UIManager::s_notif[64]   = {0};
 uint32_t UIManager::s_notif_until = 0;
-int      UIManager::s_lib_scroll = 0;
+int      UIManager::s_lib_scroll  = 0;
 
-// Display dimensions
 static constexpr int W = 240;
 static constexpr int H = 135;
 
-// Colour palette — feel free to restyle
-static constexpr uint16_t COL_BG       = 0x0000;  // black
-static constexpr uint16_t COL_FG       = 0xFFFF;  // white
-static constexpr uint16_t COL_ACCENT   = 0x051F;  // deep blue
-static constexpr uint16_t COL_SELECTED = 0x3616;  // teal highlight
-static constexpr uint16_t COL_DIM      = 0x7BEF;  // grey
+static constexpr uint16_t COL_BG       = 0x0000;
+static constexpr uint16_t COL_FG       = 0xFFFF;
+static constexpr uint16_t COL_ACCENT   = 0x051F;
+static constexpr uint16_t COL_SELECTED = 0x3616;
+static constexpr uint16_t COL_DIM      = 0x7BEF;
 static constexpr uint16_t COL_GREEN    = 0x07E0;
 static constexpr uint16_t COL_RED      = 0xF800;
 static constexpr uint16_t COL_YELLOW   = 0xFFE0;
 
 void UIManager::begin() {
-    // M5.begin() already initialised the panel; just set orientation here.
     M5.Display.setRotation(1);
     M5.Display.fillScreen(COL_BG);
 
@@ -40,34 +35,32 @@ void UIManager::begin() {
     canvas.setTextSize(1);
 }
 
-void UIManager::draw(const AppState& state, const Library& lib, const PlaylistManager& playlist) {
+void UIManager::draw(const AppState& state, const Library& lib,
+                     const PlaylistManager& playlist) {
     (void)playlist;
 
-    // If the off-screen buffer could not be allocated, draw a minimal status
-    // line straight to the panel rather than dereferencing a null sprite.
     if (!s_canvas_ok) {
         M5.Display.fillScreen(COL_BG);
         M5.Display.setTextColor(COL_FG, COL_BG);
         M5.Display.setCursor(4, 4);
-        M5.Display.printf("Tracks: %d  Vol: %d", lib.count(), state.volume);
+        M5.Display.printf("Vol: %d", state.volume);
         return;
     }
 
     canvas.fillScreen(COL_BG);
 
     switch (state.current_screen) {
-        case Screen::NOW_PLAYING:   drawNowPlaying(state, lib); break;
-        case Screen::LIBRARY:       drawLibrary(state, lib);    break;
-        case Screen::EQ_SETTINGS:   drawEQSettings(state);      break;
-        case Screen::SLEEP_TIMER:   drawSleepTimer(state);      break;
-        case Screen::VOICE_RECORDER: break;  // drawn by recorder task
-        case Screen::SETTINGS:      drawSettings(state);        break;
+        case Screen::NOW_PLAYING:    drawNowPlaying(state, lib);  break;
+        case Screen::LIBRARY:        drawLibrary(state, lib);     break;
+        case Screen::EQ_SETTINGS:    drawEQSettings(state);       break;
+        case Screen::SLEEP_TIMER:    drawSleepTimer(state);       break;
+        case Screen::SETTINGS:       drawSettings(state);         break;
+        case Screen::VOICE_RECORDER: break;
         default: break;
     }
 
     drawStatusBar(state);
 
-    // Notification overlay
     if (s_notif[0] && millis() < s_notif_until) {
         canvas.fillRoundRect(20, H/2 - 10, W - 40, 20, 4, COL_ACCENT);
         canvas.setTextColor(COL_FG, COL_ACCENT);
@@ -84,151 +77,135 @@ void UIManager::draw(const AppState& state, const Library& lib, const PlaylistMa
 
 void UIManager::drawStatusBar(const AppState& state) {
     canvas.fillRect(0, 0, W, 12, COL_ACCENT);
+    canvas.setTextColor(COL_FG, COL_ACCENT);
 
     // Battery
     char batt[12];
-    if (state.charging) {
-        snprintf(batt, sizeof(batt), "CHG %d%%", state.battery_pct);
-    } else {
-        snprintf(batt, sizeof(batt), "%d%%", state.battery_pct);
-    }
-    canvas.setTextColor(COL_FG, COL_ACCENT);
+    if (state.charging) snprintf(batt, sizeof(batt), "CHG %d%%", state.battery_pct);
+    else                snprintf(batt, sizeof(batt), "%d%%",     state.battery_pct);
     canvas.setTextDatum(textdatum_t::top_right);
     canvas.drawString(batt, W - 2, 2);
 
-    // Repeat/shuffle icons
-    const char* mode = "";
-    if (state.repeat == RepeatMode::ONE)  mode = "[1]";
-    else if (state.repeat == RepeatMode::ALL) mode = "[A]";
+    // Repeat / shuffle icons
     canvas.setTextDatum(textdatum_t::top_left);
-    canvas.drawString(mode, 2, 2);
-
-    if (state.shuffle) canvas.drawString("~", 22, 2);
-    if (state.muted)   canvas.drawString("M", 32, 2);
-    if (state.mono)    canvas.drawString("MONO", 42, 2);
-    if (state.headphones_in) canvas.drawString("HP", 72, 2);
+    if (state.repeat == RepeatMode::ONE)      canvas.drawString("[1]", 2, 2);
+    else if (state.repeat == RepeatMode::ALL) canvas.drawString("[A]", 2, 2);
+    if (state.shuffle)      canvas.drawString("~",    22, 2);
+    if (state.muted)        canvas.drawString("M",    32, 2);
+    if (state.mono)         canvas.drawString("MNO",  42, 2);
+    if (state.headphones_in) canvas.drawString("HP",  66, 2);
 
     canvas.setTextColor(COL_FG, COL_BG);
     canvas.setTextDatum(textdatum_t::top_left);
 }
 
 void UIManager::drawNowPlaying(const AppState& state, const Library& lib) {
-    const TrackInfo& t = lib.track(state.current_track_idx);
+    (void)lib;
 
-    int y = 16;
-
-    // Album art area (left side, 100×100 centered in height)
-    bool has_art = s_art_loaded;
-    if (has_art) {
-        // Art already pushed to display via loadAlbumArt
-        // Leave left 100px for art
-    } else {
-        // Music note placeholder
-        canvas.fillRect(0, 14, 100, H - 14, COL_ACCENT);
-        canvas.setTextDatum(textdatum_t::middle_center);
-        canvas.setTextSize(3);
-        canvas.drawString("=|>", 50, H/2 + 7);
-        canvas.setTextSize(1);
-        canvas.setTextDatum(textdatum_t::top_left);
-    }
-
-    int tx = 104;
-    int tw = W - tx - 2;
-
-    // Track title (truncated)
-    canvas.setTextColor(COL_FG, COL_BG);
+    // Left panel: music note placeholder
+    canvas.fillRect(0, 14, 100, H - 14, COL_ACCENT);
+    canvas.setTextDatum(textdatum_t::middle_center);
+    canvas.setTextSize(3);
+    canvas.drawString("=|>", 50, H/2 + 7);
     canvas.setTextSize(1);
     canvas.setTextDatum(textdatum_t::top_left);
 
-    // Truncate title to fit width
-    char truncated[32];
-    strncpy(truncated, t.title, 31);
-    truncated[31] = '\0';
-    canvas.drawString(truncated, tx, y);      y += 12;
+    // If album art was loaded, it was drawn directly to M5.Display underneath
+    // the canvas, so it shows through on the left 100 px when canvas has
+    // a transparent fill — we just leave the accent block instead.
 
-    // Artist
+    int tx = 104;
+    int y  = 16;
+    canvas.setTextColor(COL_FG, COL_BG);
+
+    // Track name
+    char name[48];
+    strncpy(name, state.current_track_name[0] ? state.current_track_name : "No track",
+            sizeof(name) - 1);
+    name[sizeof(name)-1] = '\0';
+    canvas.drawString(name, tx, y); y += 12;
+
+    // Directory (dim)
     canvas.setTextColor(COL_DIM, COL_BG);
-    strncpy(truncated, t.artist, 31);
-    canvas.drawString(truncated, tx, y);      y += 11;
+    char dir[40] = "/";
+    const char* slash = strrchr(state.current_track_path, '/');
+    if (slash && slash != state.current_track_path) {
+        int len = (int)(slash - state.current_track_path);
+        if (len > 39) len = 39;
+        strncpy(dir, state.current_track_path, len);
+        dir[len] = '\0';
+    }
+    canvas.drawString(dir, tx, y); y += 11;
 
-    // Album
-    strncpy(truncated, t.album, 31);
-    canvas.drawString(truncated, tx, y);      y += 12;
-
-    // Playback position / duration bar
-    uint32_t dur = t.duration_ms > 0 ? t.duration_ms : 1;
-    uint32_t pos = state.track_pos_ms;
-    int bar_w = tw;
-    int filled = (int)((int64_t)pos * bar_w / dur);
-    if (filled > bar_w) filled = bar_w;
-
-    canvas.fillRect(tx, y, bar_w, 4, COL_DIM);
-    canvas.fillRect(tx, y, filled, 4, COL_FG);
+    // Progress bar (elapsed / no total since we skip pre-scan)
+    canvas.fillRect(tx, y, W - tx - 2, 4, COL_DIM);
+    // We don't know total duration, so just show a pulsing dot
+    int dot_x = tx + (int)((millis() / 500) % (uint32_t)(W - tx - 2));
+    canvas.fillRect(dot_x, y, 4, 4, COL_FG);
     y += 8;
 
-    // Time mm:ss / mm:ss
-    char time_str[24];
-    uint32_t pos_s = pos / 1000;
-    uint32_t dur_s = dur / 1000;
-    snprintf(time_str, sizeof(time_str), "%lu:%02lu / %lu:%02lu",
-             (unsigned long)(pos_s / 60), (unsigned long)(pos_s % 60),
-             (unsigned long)(dur_s / 60), (unsigned long)(dur_s % 60));
-    canvas.setTextColor(COL_DIM, COL_BG);
-    canvas.drawString(time_str, tx, y);       y += 11;
+    // Elapsed time
+    uint32_t pos_s = state.track_pos_ms / 1000;
+    char time_str[12];
+    snprintf(time_str, sizeof(time_str), "%lu:%02lu",
+             (unsigned long)(pos_s / 60), (unsigned long)(pos_s % 60));
+    canvas.drawString(time_str, tx, y); y += 11;
 
-    // Play state indicator
-    const char* play_icon = (state.playback == PlaybackState::PLAYING) ? "> PLAY" :
-                            (state.playback == PlaybackState::PAUSED)  ? "|| PAUSE" : "[] STOP";
+    // Play state
+    const char* play_icon =
+        (state.playback == PlaybackState::PLAYING) ? "> PLAY"  :
+        (state.playback == PlaybackState::PAUSED)  ? "|| PAUSE" : "[] STOP";
     canvas.setTextColor(COL_GREEN, COL_BG);
-    canvas.drawString(play_icon, tx, y);      y += 11;
+    canvas.drawString(play_icon, tx, y); y += 11;
 
-    // Volume bar
+    // Volume + EQ
     canvas.setTextColor(COL_FG, COL_BG);
-    char vol_str[12];
-    snprintf(vol_str, sizeof(vol_str), "VOL %d", state.volume);
-    canvas.drawString(vol_str, tx, y);
-
-    // FullSound / EQ indicator
+    char vol[12];
+    snprintf(vol, sizeof(vol), "VOL %d", state.volume);
+    canvas.drawString(vol, tx, y);
     if (state.fullsound) {
         canvas.setTextColor(COL_YELLOW, COL_BG);
-        canvas.drawString("FS", tx + 55, y);
+        canvas.drawString("FS", tx + 50, y);
     }
     canvas.setTextColor(COL_DIM, COL_BG);
-    canvas.drawString(EQ_PRESET_NAMES[(uint8_t)state.eq_preset], tx + 70, y);
+    canvas.drawString(EQ_PRESET_NAMES[(uint8_t)state.eq_preset], tx + 65, y);
 }
 
 void UIManager::drawLibrary(const AppState& state, const Library& lib) {
-    static int indices[LIBRARY_MAX_TRACKS];
-    int count = lib.getFiltered(indices, LIBRARY_MAX_TRACKS);
-
+    int count = lib.count();
     int y = 14;
     int visible_rows = (H - y) / 11;
 
-    // Scroll so cursor stays visible
-    if (state.lib_cursor < s_lib_scroll) s_lib_scroll = state.lib_cursor;
-    if (state.lib_cursor >= s_lib_scroll + visible_rows) s_lib_scroll = state.lib_cursor - visible_rows + 1;
+    // Auto-scroll to keep cursor on screen
+    if (state.lib_cursor < s_lib_scroll)
+        s_lib_scroll = state.lib_cursor;
+    if (state.lib_cursor >= s_lib_scroll + visible_rows)
+        s_lib_scroll = state.lib_cursor - visible_rows + 1;
 
     canvas.setTextSize(1);
+
+    if (count == 0) {
+        canvas.setTextColor(COL_DIM, COL_BG);
+        canvas.drawString("(empty)", 4, y + 4);
+        return;
+    }
+
     for (int r = 0; r < visible_rows && (s_lib_scroll + r) < count; r++) {
-        int idx = indices[s_lib_scroll + r];
-        const TrackInfo& t = lib.track(idx);
-        bool selected = ((s_lib_scroll + r) == state.lib_cursor);
+        int idx = s_lib_scroll + r;
+        const Library::Entry& e = lib.entry(idx);
+        bool selected = (idx == state.lib_cursor);
 
         if (selected) {
-            canvas.fillRect(0, y, W, 11, COL_SELECTED);
+            canvas.fillRect(0, y, W - 3, 11, COL_SELECTED);
             canvas.setTextColor(COL_FG, COL_SELECTED);
         } else {
-            canvas.setTextColor(COL_FG, COL_BG);
+            canvas.setTextColor(e.is_dir ? COL_YELLOW : COL_FG, COL_BG);
         }
 
-        // "Artist - Title" or just title if no artist
         char row[48];
-        if (t.artist[0]) {
-            snprintf(row, sizeof(row), "%s - %s", t.artist, t.title);
-        } else {
-            strncpy(row, t.title, 47);
-        }
-        row[47] = '\0';
+        if (e.is_dir) snprintf(row, sizeof(row), "[%s]", e.name);
+        else          strncpy(row, e.name, sizeof(row) - 1);
+        row[sizeof(row) - 1] = '\0';
         canvas.drawString(row, 2, y + 1);
         y += 11;
     }
@@ -237,9 +214,17 @@ void UIManager::drawLibrary(const AppState& state, const Library& lib) {
     if (count > visible_rows) {
         int total_h = H - 14;
         int bar_h   = total_h * visible_rows / count;
-        int bar_y   = 14 + (total_h - bar_h) * s_lib_scroll / (count - visible_rows);
+        int bar_y   = 14 + (total_h - bar_h) * s_lib_scroll /
+                      (count - visible_rows);
         canvas.fillRect(W - 3, bar_y, 3, bar_h, COL_DIM);
     }
+
+    // Current path hint in dim at top right of status bar is already handled
+    // by drawStatusBar. We additionally show it at the very bottom.
+    canvas.setTextColor(COL_DIM, COL_BG);
+    canvas.setTextDatum(textdatum_t::bottom_right);
+    canvas.drawString(lib.currentPath(), W - 4, H - 1);
+    canvas.setTextDatum(textdatum_t::top_left);
 }
 
 void UIManager::drawEQSettings(const AppState& state) {
@@ -248,24 +233,18 @@ void UIManager::drawEQSettings(const AppState& state) {
     canvas.drawString("EQUALIZER", W/2, 16);
     canvas.setTextDatum(textdatum_t::top_left);
 
-    // Preset name
     char line[32];
     snprintf(line, sizeof(line), "Preset: %s", EQ_PRESET_NAMES[(uint8_t)state.eq_preset]);
     canvas.drawString(line, 4, 28);
 
-    // Band bars
     static const char* BAND_LABELS[] = {"60", "250", "1k", "4k", "12k"};
     int bx = 10;
     for (int b = 0; b < 5; b++) {
-        int gain = state.eq_custom[b];  // if preset == CUSTOM
-        // Draw a vertical bar centered at mid, ±12 dB → ±30 px
+        int gain  = state.eq_custom[b];
         int mid_y = 90;
         int bar_h = (gain * 30) / 12;
-        if (bar_h >= 0) {
-            canvas.fillRect(bx, mid_y - bar_h, 18, bar_h, COL_ACCENT);
-        } else {
-            canvas.fillRect(bx, mid_y, 18, -bar_h, COL_DIM);
-        }
+        if (bar_h >= 0) canvas.fillRect(bx, mid_y - bar_h, 18, bar_h, COL_ACCENT);
+        else            canvas.fillRect(bx, mid_y, 18, -bar_h, COL_DIM);
         canvas.drawRect(bx, mid_y - 30, 18, 60, COL_DIM);
         canvas.setTextColor(COL_DIM, COL_BG);
         canvas.drawString(BAND_LABELS[b], bx + 2, 122);
@@ -282,11 +261,8 @@ void UIManager::drawSleepTimer(const AppState& state) {
     for (int i = 0; i < SLEEP_TIMER_COUNT; i++) {
         bool sel = (i == state.sleep_timer_idx);
         char opt[16];
-        if (SLEEP_TIMER_OPTIONS[i] == 0) {
-            snprintf(opt, sizeof(opt), "Off");
-        } else {
-            snprintf(opt, sizeof(opt), "%d min", SLEEP_TIMER_OPTIONS[i]);
-        }
+        if (SLEEP_TIMER_OPTIONS[i] == 0) snprintf(opt, sizeof(opt), "Off");
+        else                              snprintf(opt, sizeof(opt), "%d min", SLEEP_TIMER_OPTIONS[i]);
         if (sel) {
             canvas.fillRect(4, 30 + i * 14, W - 8, 13, COL_SELECTED);
             canvas.setTextColor(COL_FG, COL_SELECTED);
@@ -303,22 +279,20 @@ void UIManager::drawRecorder(const AppState& state, uint32_t elapsed_ms, uint8_t
     canvas.fillScreen(COL_BG);
     canvas.setTextColor(COL_RED, COL_BG);
     canvas.setTextDatum(textdatum_t::top_center);
-    canvas.drawString("● RECORDING", W/2, 20);
+    canvas.drawString("RECORDING", W/2, 20);
 
-    // Elapsed time
     char elapsed[12];
     uint32_t s = elapsed_ms / 1000;
-    snprintf(elapsed, sizeof(elapsed), "%02lu:%02lu", (unsigned long)(s / 60), (unsigned long)(s % 60));
+    snprintf(elapsed, sizeof(elapsed), "%02lu:%02lu",
+             (unsigned long)(s / 60), (unsigned long)(s % 60));
     canvas.setTextColor(COL_FG, COL_BG);
     canvas.drawString(elapsed, W/2, 40);
 
-    // Level meter bar
-    int bar_x  = 20;
     int bar_w  = W - 40;
     int filled = (int)((int64_t)level * bar_w / 100);
     uint16_t col = (level > 80) ? COL_RED : (level > 60) ? COL_YELLOW : COL_GREEN;
-    canvas.fillRect(bar_x, 70, filled, 14, col);
-    canvas.drawRect(bar_x, 70, bar_w, 14, COL_DIM);
+    canvas.fillRect(20, 70, filled, 14, col);
+    canvas.drawRect(20, 70, bar_w, 14, COL_DIM);
     canvas.setTextDatum(textdatum_t::middle_center);
     canvas.setTextColor(COL_FG, COL_BG);
     canvas.drawString("STOP: Fn+REC", W/2, 110);
@@ -334,34 +308,21 @@ void UIManager::drawSettings(const AppState& state) {
 
     char line[40];
     int y = 32;
-
-    snprintf(line, sizeof(line), "FullSound: %s", state.fullsound ? "ON" : "OFF");
-    canvas.drawString(line, 4, y); y += 14;
-
-    snprintf(line, sizeof(line), "Output:    %s", state.mono ? "Mono" : "Stereo");
-    canvas.drawString(line, 4, y); y += 14;
-
-    snprintf(line, sizeof(line), "Shuffle:   %s", state.shuffle ? "ON" : "OFF");
-    canvas.drawString(line, 4, y); y += 14;
-
-    const char* rmode = (state.repeat == RepeatMode::OFF) ? "Off" :
-                        (state.repeat == RepeatMode::ONE) ? "One" : "All";
-    snprintf(line, sizeof(line), "Repeat:    %s", rmode);
-    canvas.drawString(line, 4, y); y += 14;
-
-    snprintf(line, sizeof(line), "Volume:    %d/30", state.volume);
-    canvas.drawString(line, 4, y); y += 14;
-
-    snprintf(line, sizeof(line), "Battery:   %d%% (%s)", state.battery_pct, state.charging ? "CHG" : "DIS");
-    canvas.drawString(line, 4, y);
+    snprintf(line, sizeof(line), "FullSound: %s",      state.fullsound ? "ON" : "OFF");     canvas.drawString(line, 4, y); y += 14;
+    snprintf(line, sizeof(line), "Output:    %s",      state.mono      ? "Mono" : "Stereo"); canvas.drawString(line, 4, y); y += 14;
+    snprintf(line, sizeof(line), "Shuffle:   %s",      state.shuffle   ? "ON" : "OFF");      canvas.drawString(line, 4, y); y += 14;
+    const char* rm = (state.repeat == RepeatMode::OFF) ? "Off" :
+                     (state.repeat == RepeatMode::ONE) ? "One" : "All";
+    snprintf(line, sizeof(line), "Repeat:    %s", rm);                                        canvas.drawString(line, 4, y); y += 14;
+    snprintf(line, sizeof(line), "Volume:    %d/30",   state.volume);                         canvas.drawString(line, 4, y); y += 14;
+    snprintf(line, sizeof(line), "Battery:   %d%% (%s)", state.battery_pct, state.charging ? "CHG" : "DIS"); canvas.drawString(line, 4, y);
 }
 
 void UIManager::loadAlbumArt(const char* track_path, bool has_embedded) {
+    (void)has_embedded;
     s_art_loaded = false;
 
-    // Resolve the art file: cover.jpg / folder.jpg in the track's directory.
-    // (Embedded APIC extraction would write a temp file we then load the same way.)
-    char art_path[256] = {0};
+    char art_path[128] = {0};
     strncpy(art_path, track_path, sizeof(art_path) - 1);
     char* slash = strrchr(art_path, '/');
     if (!slash) return;
@@ -372,8 +333,6 @@ void UIManager::loadAlbumArt(const char* track_path, bool has_embedded) {
         if (!SD.exists(art_path)) return;
     }
 
-    // Read the JPEG into a heap buffer and decode from memory. This avoids
-    // M5GFX's filesystem-wrapper template, which can't bind to fs::SDFS directly.
     File f = SD.open(art_path);
     if (!f) return;
     size_t len = f.size();
@@ -382,11 +341,9 @@ void UIManager::loadAlbumArt(const char* track_path, bool has_embedded) {
     uint8_t* buf = (uint8_t*)malloc(len);
     if (!buf) { f.close(); return; }
 
-    size_t read = f.read(buf, len);
+    size_t n = f.read(buf, len);
     f.close();
-
-    if (read == len) {
-        // Scale to fit a 100×(H-14) square in the upper-left of the now-playing view.
+    if (n == len) {
         M5.Display.drawJpg(buf, len, 0, 14, 100, H - 14);
         s_art_loaded = true;
     }

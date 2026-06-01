@@ -8,7 +8,7 @@ uint8_t       AudioEngine::s_vol         = VOLUME_DEFAULT;
 bool          AudioEngine::s_muted       = false;
 bool          AudioEngine::s_eof         = false;
 uint32_t      AudioEngine::s_position_ms = 0;
-char          AudioEngine::s_current_path[256] = {0};
+char          AudioEngine::s_current_path[128] = {0};
 
 // ── ESP32-audioI2S global callbacks (weak symbol overrides) ────────────────
 // audio_eof_mp3 fires at the end of ANY decoded file (mp3/flac/wav/aac/ogg).
