@@ -6,6 +6,14 @@
 
 static const TrackInfo EMPTY_TRACK = {};
 
+// Safe little-endian 32-bit read from a byte buffer (avoids unaligned loads,
+// which fault on Xtensa). Returns 0 if the read would run past the buffer.
+static inline uint32_t readLE32(const uint8_t* buf, uint32_t off, uint32_t len) {
+    if (off + 4 > len) return 0;
+    return (uint32_t)buf[off] | ((uint32_t)buf[off + 1] << 8) |
+           ((uint32_t)buf[off + 2] << 16) | ((uint32_t)buf[off + 3] << 24);
+}
+
 // Portable case-insensitive substring search (strcasestr is a GNU extension)
 static const char* ci_strstr(const char* haystack, const char* needle) {
     if (!needle || !*needle) return haystack;
@@ -213,18 +221,21 @@ void Library::parseVorbisComment(const char* path, TrackInfo& info) {
                        ((uint32_t)block_hdr[2] << 8)  |
                         (uint32_t)block_hdr[3];
 
-        if (type == 4) {
-            // VORBIS_COMMENT block
+        if (type == 4 && len > 8 && len < 64 * 1024) {
+            // VORBIS_COMMENT block. All length fields are little-endian and may
+            // be unaligned in the buffer — read them byte-wise, since the Xtensa
+            // core faults on unaligned 32-bit loads.
             uint8_t* buf = (uint8_t*)malloc(len + 1);
             if (buf) {
                 f.read(buf, len);
                 buf[len] = '\0';
                 uint32_t off = 0;
                 // vendor string
-                uint32_t vlen = *(uint32_t*)(buf + off); off += 4 + vlen;
-                uint32_t n_comments = *(uint32_t*)(buf + off); off += 4;
-                for (uint32_t i = 0; i < n_comments && off < len; i++) {
-                    uint32_t clen = *(uint32_t*)(buf + off); off += 4;
+                uint32_t vlen = readLE32(buf, off, len); off += 4 + vlen;
+                if (off + 4 > len) { free(buf); break; }
+                uint32_t n_comments = readLE32(buf, off, len); off += 4;
+                for (uint32_t i = 0; i < n_comments && off + 4 <= len; i++) {
+                    uint32_t clen = readLE32(buf, off, len); off += 4;
                     if (off + clen > len) break;
                     char* comment = (char*)(buf + off); off += clen;
                     char tmp[256] = {0};

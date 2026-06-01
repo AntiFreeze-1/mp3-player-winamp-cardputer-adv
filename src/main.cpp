@@ -293,7 +293,9 @@ static void handleKey(const KeyEvent& ev, AppState& state) {
 
 // ── Audio task (Core 1, priority 5) ───────────────────────────────────────
 static void audioTask(void* arg) {
+    Serial.println("[TASK] audio begin");
     AudioEngine::begin();
+    Serial.println("[TASK] audio ready");
 
     for (;;) {
         AudioEngine::loop();
@@ -338,7 +340,9 @@ static void audioTask(void* arg) {
 
 // ── Keyboard task (Core 0, priority 4) ────────────────────────────────────
 static void keyboardTask(void* arg) {
+    Serial.println("[TASK] keyboard begin");
     TCA8418::begin();
+    Serial.println("[TASK] keyboard ready");
 
     for (;;) {
         if (TCA8418::available()) {
@@ -360,7 +364,9 @@ static void keyboardTask(void* arg) {
 
 // ── UI task (Core 0, priority 3) ──────────────────────────────────────────
 static void uiTask(void* arg) {
+    Serial.println("[TASK] ui begin");
     UIManager::begin();
+    Serial.println("[TASK] ui ready");
 
     for (;;) {
         // Process key events
@@ -417,7 +423,14 @@ void setup() {
     auto cfg = M5.config();
     M5.begin(cfg);
 
+    // Serial over USB-CDC for boot diagnostics. If the device reboot-loops,
+    // open a serial monitor at 115200 to see which stage logged last.
+    Serial.begin(115200);
+    delay(300);   // allow USB CDC to enumerate
+    Serial.println("\n[BOOT] M5 init OK");
+
     Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL, I2C_FREQ_HZ);
+    Serial.println("[BOOT] I2C init OK");
 
     // Mount SD card. The SPI bus pins must be set explicitly — the Arduino
     // defaults are wrong for this board, which presents as a mount failure
@@ -428,12 +441,15 @@ void setup() {
     bool sd_ok = false;
     for (int attempt = 0; attempt < 3 && !sd_ok; attempt++) {
         uint32_t freq = (attempt == 0) ? SD_SPI_FREQ_HZ : 4000000;  // back off to 4 MHz
-        sd_ok = SD.begin(PIN_SD_CS, SPI, freq);
+        // max_files = 10: the recursive library scan holds several directory
+        // handles open at once and would exhaust the default limit of 5.
+        sd_ok = SD.begin(PIN_SD_CS, SPI, freq, "/sd", 10);
         if (!sd_ok) {
             SD.end();
             vTaskDelay(pdMS_TO_TICKS(100));
         }
     }
+    Serial.printf("[BOOT] SD mount %s\n", sd_ok ? "OK" : "FAILED");
 
     if (!sd_ok) {
         M5.Display.fillScreen(TFT_RED);
@@ -464,7 +480,9 @@ void setup() {
     g_state.muted           = false;
 
     // Scan library
+    Serial.println("[BOOT] scanning SD library...");
     g_lib.scan();
+    Serial.printf("[BOOT] library scan done: %d tracks\n", g_lib.count());
     buildQueue(g_state.shuffle);
 
     // Apply persisted EQ/DSP before audio starts
@@ -486,6 +504,7 @@ void setup() {
     }
 
     // Spawn tasks
+    Serial.println("[BOOT] starting tasks");
     xTaskCreatePinnedToCore(audioTask,    "AudioTask", AUDIO_TASK_STACK, nullptr, 5, nullptr, 1);
     xTaskCreatePinnedToCore(keyboardTask, "KbdTask",   KBD_TASK_STACK,   nullptr, 4, nullptr, 0);
     xTaskCreatePinnedToCore(uiTask,       "UITask",    UI_TASK_STACK,    nullptr, 3, nullptr, 0);
