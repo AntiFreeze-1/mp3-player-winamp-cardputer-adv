@@ -43,7 +43,7 @@
 
 // ── File scanning ──────────────────────────────────────────────────────────
 #define SD_SCAN_MAX_DEPTH   4
-#define LIBRARY_MAX_TRACKS  2000
+#define LIBRARY_MAX_TRACKS  250
 
 // ── NVS namespace ──────────────────────────────────────────────────────────
 #define NVS_NAMESPACE   "mp3player"

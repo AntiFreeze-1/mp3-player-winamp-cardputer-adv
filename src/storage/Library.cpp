@@ -2,7 +2,6 @@
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
-#include <esp_heap_caps.h>
 
 static const TrackInfo EMPTY_TRACK = {};
 
@@ -43,13 +42,7 @@ static bool isAudioFile(const char* name) {
 }
 
 Library::Library() {
-    // Track index lives in PSRAM — ~1.3 MB at full capacity, far too large for DRAM.
-    m_tracks = (TrackInfo*)heap_caps_malloc(sizeof(TrackInfo) * LIBRARY_MAX_TRACKS, MALLOC_CAP_SPIRAM);
-    if (!m_tracks) {
-        // Fallback to internal RAM with a much smaller cap would go here;
-        // PSRAM is mandatory per spec, so we expect this to succeed.
-        m_tracks = (TrackInfo*)malloc(sizeof(TrackInfo) * LIBRARY_MAX_TRACKS);
-    }
+    m_tracks = (TrackInfo*)malloc(sizeof(TrackInfo) * LIBRARY_MAX_TRACKS);
     if (m_tracks) memset(m_tracks, 0, sizeof(TrackInfo) * LIBRARY_MAX_TRACKS);
     memset(m_artists, 0, sizeof(m_artists));
     memset(m_albums,  0, sizeof(m_albums));
@@ -270,7 +263,7 @@ void Library::indexArtistsAlbums() {
             for (int j = 0; j < m_artist_count; j++) {
                 if (strcmp(m_artists[j], artist) == 0) { found = true; break; }
             }
-            if (!found && m_artist_count < 512) m_artists[m_artist_count++] = artist;
+            if (!found && m_artist_count < 128) m_artists[m_artist_count++] = artist;
         }
         const char* album = m_tracks[i].album;
         if (album[0] != '\0') {
@@ -278,7 +271,7 @@ void Library::indexArtistsAlbums() {
             for (int j = 0; j < m_album_count; j++) {
                 if (strcmp(m_albums[j], album) == 0) { found = true; break; }
             }
-            if (!found && m_album_count < 512) m_albums[m_album_count++] = album;
+            if (!found && m_album_count < 128) m_albums[m_album_count++] = album;
         }
     }
 }

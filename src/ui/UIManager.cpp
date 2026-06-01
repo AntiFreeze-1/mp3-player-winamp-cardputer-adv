@@ -1,6 +1,5 @@
 #include "UIManager.h"
 #include <M5Unified.h>
-#include <esp_heap_caps.h>
 #include <string.h>
 #include <stdio.h>
 #include "../config.h"
@@ -11,6 +10,7 @@
 // M5 library already owns.
 M5Canvas UIManager::canvas(&M5.Display);
 bool     UIManager::s_art_loaded = false;
+bool     UIManager::s_canvas_ok  = false;
 char     UIManager::s_notif[64] = {0};
 uint32_t UIManager::s_notif_until = 0;
 int      UIManager::s_lib_scroll = 0;
@@ -33,13 +33,26 @@ void UIManager::begin() {
     // M5.begin() already initialised the panel; just set orientation here.
     M5.Display.setRotation(1);
     M5.Display.fillScreen(COL_BG);
-    canvas.createSprite(W, H);
+
+    canvas.setColorDepth(16);
+    s_canvas_ok = canvas.createSprite(W, H) != nullptr;
     canvas.setTextColor(COL_FG, COL_BG);
     canvas.setTextSize(1);
 }
 
 void UIManager::draw(const AppState& state, const Library& lib, const PlaylistManager& playlist) {
     (void)playlist;
+
+    // If the off-screen buffer could not be allocated, draw a minimal status
+    // line straight to the panel rather than dereferencing a null sprite.
+    if (!s_canvas_ok) {
+        M5.Display.fillScreen(COL_BG);
+        M5.Display.setTextColor(COL_FG, COL_BG);
+        M5.Display.setCursor(4, 4);
+        M5.Display.printf("Tracks: %d  Vol: %d", lib.count(), state.volume);
+        return;
+    }
+
     canvas.fillScreen(COL_BG);
 
     switch (state.current_screen) {
@@ -286,6 +299,7 @@ void UIManager::drawSleepTimer(const AppState& state) {
 
 void UIManager::drawRecorder(const AppState& state, uint32_t elapsed_ms, uint8_t level) {
     (void)state;
+    if (!s_canvas_ok) return;
     canvas.fillScreen(COL_BG);
     canvas.setTextColor(COL_RED, COL_BG);
     canvas.setTextDatum(textdatum_t::top_center);
@@ -358,15 +372,14 @@ void UIManager::loadAlbumArt(const char* track_path, bool has_embedded) {
         if (!SD.exists(art_path)) return;
     }
 
-    // Read the JPEG into a PSRAM buffer and decode from memory. This avoids
+    // Read the JPEG into a heap buffer and decode from memory. This avoids
     // M5GFX's filesystem-wrapper template, which can't bind to fs::SDFS directly.
     File f = SD.open(art_path);
     if (!f) return;
     size_t len = f.size();
-    if (len == 0 || len > 256 * 1024) { f.close(); return; }
+    if (len == 0 || len > 48 * 1024) { f.close(); return; }
 
-    uint8_t* buf = (uint8_t*)heap_caps_malloc(len, MALLOC_CAP_SPIRAM);
-    if (!buf) buf = (uint8_t*)malloc(len);
+    uint8_t* buf = (uint8_t*)malloc(len);
     if (!buf) { f.close(); return; }
 
     size_t read = f.read(buf, len);

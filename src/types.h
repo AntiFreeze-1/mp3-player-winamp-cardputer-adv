@@ -4,10 +4,10 @@
 
 // ── Track metadata ─────────────────────────────────────────────────────────
 struct TrackInfo {
-    char path[256];
-    char title[128];
-    char artist[128];
-    char album[128];
+    char path[128];
+    char title[48];
+    char artist[48];
+    char album[48];
     uint8_t  track_num;
     uint32_t duration_ms;
     bool     has_art;
