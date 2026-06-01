@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <M5Unified.h>
 #include <SD.h>
+#include <SPI.h>
 #include <Wire.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -418,11 +419,27 @@ void setup() {
 
     Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL, I2C_FREQ_HZ);
 
-    // Mount SD card
-    if (!SD.begin(PIN_SD_CS)) {
-        // SD mount failed — show error and hang
+    // Mount SD card. The SPI bus pins must be set explicitly — the Arduino
+    // defaults are wrong for this board, which presents as a mount failure
+    // even with a correctly formatted card. Retry a few times and fall back
+    // to a slower clock, which some cards need to enumerate reliably.
+    SPI.begin(PIN_SD_SCK, PIN_SD_MISO, PIN_SD_MOSI, PIN_SD_CS);
+
+    bool sd_ok = false;
+    for (int attempt = 0; attempt < 3 && !sd_ok; attempt++) {
+        uint32_t freq = (attempt == 0) ? SD_SPI_FREQ_HZ : 4000000;  // back off to 4 MHz
+        sd_ok = SD.begin(PIN_SD_CS, SPI, freq);
+        if (!sd_ok) {
+            SD.end();
+            vTaskDelay(pdMS_TO_TICKS(100));
+        }
+    }
+
+    if (!sd_ok) {
         M5.Display.fillScreen(TFT_RED);
-        M5.Display.drawString("SD CARD ERROR", 10, 40);
+        M5.Display.setTextColor(TFT_WHITE, TFT_RED);
+        M5.Display.drawString("SD CARD ERROR", 10, 30);
+        M5.Display.drawString("Check card seated / FAT32", 10, 50);
         while (true) vTaskDelay(1000);
     }
 

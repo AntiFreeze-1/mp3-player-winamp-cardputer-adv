@@ -21,7 +21,13 @@
 #define PIN_HP_DETECT   38   // headphone jack-detect GPIO (check schematic)
 
 // ── microSD (SPI) ──────────────────────────────────────────────────────────
+// Same SPI bus as the original Cardputer. The SPI pins MUST be configured
+// explicitly before SD.begin() — the Arduino defaults do not match this board.
+#define PIN_SD_SCK      40
+#define PIN_SD_MISO     39
+#define PIN_SD_MOSI     14
 #define PIN_SD_CS       12
+#define SD_SPI_FREQ_HZ  20000000   // 20 MHz; drop to 4 MHz if a card is flaky
 
 // ── Battery ADC ────────────────────────────────────────────────────────────
 #define PIN_BATT_ADC    4
