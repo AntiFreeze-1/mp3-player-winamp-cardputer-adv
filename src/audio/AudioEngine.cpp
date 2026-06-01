@@ -10,21 +10,18 @@ bool          AudioEngine::s_eof         = false;
 uint32_t      AudioEngine::s_position_ms = 0;
 char          AudioEngine::s_current_path[256] = {0};
 
-// ── ESP32-audioI2S global callbacks ────────────────────────────────────────
-void audio_eof_mp3(const char* info)          { AudioEngine::onEOF(); }
-void audio_eof_flac(const char* info)         { AudioEngine::onEOF(); }
-void audio_eof_wav(const char* info)          { AudioEngine::onEOF(); }
-void audio_eof_aac(const char* info)          { AudioEngine::onEOF(); }
-void audio_eof_ogg(const char* info)          { AudioEngine::onEOF(); }
-void audio_info(const char* info)             { AudioEngine::onInfo(info); }
-void audio_error_mp3(const char* e)           { AudioEngine::onError(e); }
-void audio_id3data(const char* type, const char* value) { AudioEngine::onID3Tag(type, value); }
+// ── ESP32-audioI2S global callbacks (weak symbol overrides) ────────────────
+// audio_eof_mp3 fires at the end of ANY decoded file (mp3/flac/wav/aac/ogg).
+void audio_eof_mp3(const char* info)  { (void)info; AudioEngine::onEOF(); }
+void audio_info(const char* info)     { AudioEngine::onInfo(info); }
+void audio_id3data(const char* info)  { AudioEngine::onID3Tag(info); }
 
-// PCM hook — called by ESP32-audioI2S before I2S write in v3.x
-void audio_process_i2s(int16_t* outBuf, uint8_t* Sync) {
-    // Sync == nullptr means regular buffer, process 64 stereo frames = 128 samples
-    if (Sync) return;
-    AudioEngine::onPCM(outBuf, 128);
+// PCM hook — called once per stereo frame just before the I2S write.
+// `sample` packs the two 16-bit channels into one uint32_t.
+void audio_process_i2s(uint32_t* sample, bool* continueI2S) {
+    *continueI2S = true;                       // let the library still write the frame
+    int16_t* pcm = reinterpret_cast<int16_t*>(sample);
+    AudioEngine::onPCM(pcm, 2);                 // 2 int16 = one L/R frame
 }
 
 void AudioEngine::begin() {
@@ -109,6 +106,10 @@ void AudioEngine::setFullSound(bool enabled) {
     DSP::setFullSound(enabled);
 }
 
+void AudioEngine::setMono(bool enabled) {
+    DSP::setMono(enabled);
+}
+
 bool AudioEngine::headphonesIn() {
     // Jack-detect: active low (jack in = GPIO pulled low by detection switch)
     return digitalRead(PIN_HP_DETECT) == LOW;
@@ -123,14 +124,8 @@ void AudioEngine::onInfo(const char* info) {
     (void)info;
 }
 
-void AudioEngine::onError(const char* error) {
-    (void)error;
-    s_eof   = true;
-    s_state = PlaybackState::STOPPED;
-}
-
-void AudioEngine::onID3Tag(const char* type, const char* value) {
-    (void)type; (void)value;
+void AudioEngine::onID3Tag(const char* info) {
+    (void)info;
 }
 
 void AudioEngine::onPCM(int16_t* data, size_t len) {

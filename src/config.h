@@ -10,12 +10,11 @@
 #define TCA8418_ADDR    0x34
 #define PIN_KBD_IRQ     11
 
-// ── I²S audio bus (ES8311 data) ────────────────────────────────────────────
-// Cross-reference Cardputer-Adv schematic before compiling.
-#define PIN_I2S_BCLK    42
-#define PIN_I2S_LRCLK   40
-#define PIN_I2S_DOUT    41
-#define PIN_I2S_DIN     39
+// ── I²S audio bus (ES8311 codec) ───────────────────────────────────────────
+#define PIN_I2S_BCLK    41
+#define PIN_I2S_LRCLK   43
+#define PIN_I2S_DOUT    42   // ESP → codec (playback)
+#define PIN_I2S_DIN     46   // codec → ESP (mic input, shares CLK with LRCLK)
 
 // ── ES8311 codec ───────────────────────────────────────────────────────────
 #define ES8311_ADDR     0x18

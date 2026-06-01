@@ -230,6 +230,14 @@ static void handleKey(const KeyEvent& ev, AppState& state) {
             UIManager::showNotif(state.fullsound ? "FullSound ON" : "FullSound OFF");
             break;
 
+        // ── Mono / stereo toggle ──────────────────────────────────────────
+        case KeyCode::FN_O:
+            state.mono = !state.mono;
+            AudioEngine::setMono(state.mono);
+            NVSConfig::saveMono(state.mono);
+            UIManager::showNotif(state.mono ? "Mono" : "Stereo");
+            break;
+
         // ── Sleep timer menu ──────────────────────────────────────────────
         case KeyCode::FN_T:
             state.current_screen = Screen::SLEEP_TIMER;
@@ -446,6 +454,7 @@ void setup() {
     DSP::init(48000.0f);
     DSP::setEQPreset(g_state.eq_preset, g_state.eq_custom);
     DSP::setFullSound(g_state.fullsound);
+    DSP::setMono(g_state.mono);
 
     // Resume last track if available
     if (last_track[0] != '\0' && g_lib.count() > 0) {

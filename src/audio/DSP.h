@@ -35,6 +35,10 @@ public:
     static void setFullSound(bool enabled);
     static bool fullSoundEnabled() { return s_fullsound; }
 
+    // Mono downmix: sum L+R and write to both channels
+    static void setMono(bool enabled);
+    static bool monoEnabled() { return s_mono; }
+
     // Process one stereo frame (interleaved int16 L/R pairs)
     // count = total number of int16 samples (pairs * 2)
     static void process(int16_t* samples, int count);
@@ -42,6 +46,7 @@ public:
 private:
     static float s_sr;
     static bool  s_fullsound;
+    static bool  s_mono;
 
     // 5-band EQ biquads
     static Biquad s_eq[5];

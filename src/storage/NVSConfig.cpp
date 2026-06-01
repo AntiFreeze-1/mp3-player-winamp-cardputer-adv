@@ -11,6 +11,7 @@ void NVSConfig::load(AppState& state, char* last_track_out, uint32_t* last_pos_m
     state.volume       = prefs.getUChar("volume", VOLUME_DEFAULT);
     state.eq_preset    = (EQPreset)prefs.getUChar("eq_preset", 0);
     state.fullsound    = prefs.getBool("fullsound", false);
+    state.mono         = prefs.getBool("mono", false);
     state.shuffle      = prefs.getBool("shuffle", false);
     state.repeat       = (RepeatMode)prefs.getUChar("repeat_mode", 0);
     state.sleep_timer_idx = prefs.getUChar("sleep_timer", 0);
@@ -41,6 +42,7 @@ void NVSConfig::save(const AppState& state, const char* last_track, uint32_t las
     prefs.putUChar("volume",       state.volume);
     prefs.putUChar("eq_preset",    (uint8_t)state.eq_preset);
     prefs.putBool ("fullsound",    state.fullsound);
+    prefs.putBool ("mono",         state.mono);
     prefs.putBool ("shuffle",      state.shuffle);
     prefs.putUChar("repeat_mode",  (uint8_t)state.repeat);
     prefs.putUChar("sleep_timer",  state.sleep_timer_idx);
@@ -88,6 +90,12 @@ void NVSConfig::saveTrackPosition(const char* path, uint32_t pos_ms) {
 void NVSConfig::saveFullSound(bool enabled) {
     prefs.begin(NVS_NAMESPACE, false);
     prefs.putBool("fullsound", enabled);
+    prefs.end();
+}
+
+void NVSConfig::saveMono(bool enabled) {
+    prefs.begin(NVS_NAMESPACE, false);
+    prefs.putBool("mono", enabled);
     prefs.end();
 }
 

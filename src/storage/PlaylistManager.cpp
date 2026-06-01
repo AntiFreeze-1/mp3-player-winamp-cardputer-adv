@@ -1,5 +1,6 @@
 #include "PlaylistManager.h"
 #include <string.h>
+#include <esp_heap_caps.h>
 
 const char* PlaylistManager::FAVORITES_PATH  = "/Playlists/favorites.m3u";
 const char* PlaylistManager::RECORDINGS_PATH = "/Recordings";
@@ -74,17 +75,23 @@ bool PlaylistManager::addFavorite(const char* track_path) {
 }
 
 bool PlaylistManager::removeFavorite(const char* track_path) {
-    // Load all entries, remove the one, rewrite
-    static char entries[PLAYLIST_MAX_ENTRIES][256];
+    // Load all entries, remove the matching one, rewrite. The scratch buffer
+    // (up to ~512 KB) is allocated in PSRAM to stay out of internal DRAM.
+    typedef char Entry[256];
+    Entry* entries = (Entry*)heap_caps_malloc(sizeof(Entry) * PLAYLIST_MAX_ENTRIES, MALLOC_CAP_SPIRAM);
+    if (!entries) entries = (Entry*)malloc(sizeof(Entry) * PLAYLIST_MAX_ENTRIES);
+    if (!entries) return false;
+
     int n = loadFavorites(entries, PLAYLIST_MAX_ENTRIES);
     SD.remove(FAVORITES_PATH);
     File f = SD.open(FAVORITES_PATH, FILE_WRITE);
-    if (!f) return false;
+    if (!f) { free(entries); return false; }
     f.println("#EXTM3U");
     for (int i = 0; i < n; i++) {
         if (strcmp(entries[i], track_path) != 0) f.println(entries[i]);
     }
     f.close();
+    free(entries);
     return true;
 }
 

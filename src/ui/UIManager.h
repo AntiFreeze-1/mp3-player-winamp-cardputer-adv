@@ -35,7 +35,6 @@ private:
     static void drawList(const char* const* items, int count, int cursor, int scroll);
 
     static bool    s_art_loaded;
-    static uint8_t s_art_buf[];
     static char    s_notif[64];
     static uint32_t s_notif_until;
 

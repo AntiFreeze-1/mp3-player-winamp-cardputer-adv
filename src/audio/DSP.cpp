@@ -4,12 +4,17 @@
 
 float  DSP::s_sr       = 48000.0f;
 bool   DSP::s_fullsound = false;
+bool   DSP::s_mono      = false;
 Biquad DSP::s_eq[5]    = {};
 Biquad DSP::s_bass_shelf = {};
 Biquad DSP::s_presence   = {};
 Biquad DSP::s_exciter_hp = {};
 
 static constexpr float PI_F = 3.14159265358979f;
+
+// Out-of-class definitions for ODR-used constexpr static members
+constexpr float DSP::EQ_FREQS[5];
+constexpr float DSP::EQ_Q;
 
 void DSP::calcPeaking(Biquad& bq, float freq, float gain_db, float Q) {
     float A  = powf(10.0f, gain_db / 40.0f);
@@ -127,6 +132,10 @@ void DSP::setFullSound(bool enabled) {
     s_fullsound = enabled;
 }
 
+void DSP::setMono(bool enabled) {
+    s_mono = enabled;
+}
+
 // Inline soft-clip for harmonic exciter
 static inline float softClip(float x) {
     // tanh approximation
@@ -166,6 +175,13 @@ void DSP::process(int16_t* samples, int count) {
             // Recombine: take EQ'd signal, add FullSound layers
             l = bl * 0.5f + pl * 0.3f + el + l * 0.2f;
             r = br * 0.5f + pr * 0.3f + er + r * 0.2f;
+        }
+
+        // Mono downmix: average both channels into a single signal
+        if (s_mono) {
+            float m = (l + r) * 0.5f;
+            l = m;
+            r = m;
         }
 
         // Hard clip and convert back to int16

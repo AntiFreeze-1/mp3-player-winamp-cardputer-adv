@@ -1,5 +1,6 @@
 #include "UIManager.h"
 #include <M5Unified.h>
+#include <esp_heap_caps.h>
 #include <string.h>
 #include <stdio.h>
 #include "../config.h"
@@ -89,7 +90,8 @@ void UIManager::drawStatusBar(const AppState& state) {
 
     if (state.shuffle) canvas.drawString("~", 22, 2);
     if (state.muted)   canvas.drawString("M", 32, 2);
-    if (state.headphones_in) canvas.drawString("HP", 40, 2);
+    if (state.mono)    canvas.drawString("MONO", 42, 2);
+    if (state.headphones_in) canvas.drawString("HP", 72, 2);
 
     canvas.setTextColor(COL_FG, COL_BG);
     canvas.setTextDatum(textdatum_t::top_left);
@@ -320,6 +322,9 @@ void UIManager::drawSettings(const AppState& state) {
     snprintf(line, sizeof(line), "FullSound: %s", state.fullsound ? "ON" : "OFF");
     canvas.drawString(line, 4, y); y += 14;
 
+    snprintf(line, sizeof(line), "Output:    %s", state.mono ? "Mono" : "Stereo");
+    canvas.drawString(line, 4, y); y += 14;
+
     snprintf(line, sizeof(line), "Shuffle:   %s", state.shuffle ? "ON" : "OFF");
     canvas.drawString(line, 4, y); y += 14;
 
@@ -338,34 +343,39 @@ void UIManager::drawSettings(const AppState& state) {
 void UIManager::loadAlbumArt(const char* track_path, bool has_embedded) {
     s_art_loaded = false;
 
-    // Try embedded art first (has_embedded = true → APIC tag found),
-    // then cover.jpg in the track's directory.
+    // Resolve the art file: cover.jpg / folder.jpg in the track's directory.
+    // (Embedded APIC extraction would write a temp file we then load the same way.)
     char art_path[256] = {0};
+    strncpy(art_path, track_path, sizeof(art_path) - 1);
+    char* slash = strrchr(art_path, '/');
+    if (!slash) return;
 
-    if (!has_embedded) {
-        // Build cover.jpg path from track directory
-        strncpy(art_path, track_path, sizeof(art_path) - 1);
-        char* slash = strrchr(art_path, '/');
-        if (slash) {
-            strcpy(slash + 1, "cover.jpg");
-        } else {
-            return;
-        }
+    strcpy(slash + 1, "cover.jpg");
+    if (!SD.exists(art_path)) {
+        strcpy(slash + 1, "folder.jpg");
+        if (!SD.exists(art_path)) return;
     }
 
-    if (has_embedded || SD.exists(art_path)) {
-        // Use M5GFX drawJpgFile to render JPEG scaled to fit 100x100 in upper-left
-        // M5GFX handles JPEG decode internally
-        if (has_embedded) {
-            // Embedded art: extracted and written to a temp file by caller (AudioEngine ID3 callback)
-            strncpy(art_path, "/tmp_art.jpg", sizeof(art_path));
-        }
-        if (SD.exists(art_path)) {
-            display.drawJpgFile(SD, art_path, 0, 14, 100, H - 14, 0, 0, 0.0f, 0.0f,
-                                textdatum_t::middle_center);
-            s_art_loaded = true;
-        }
+    // Read the JPEG into a PSRAM buffer and decode from memory. This avoids
+    // M5GFX's filesystem-wrapper template, which can't bind to fs::SDFS directly.
+    File f = SD.open(art_path);
+    if (!f) return;
+    size_t len = f.size();
+    if (len == 0 || len > 256 * 1024) { f.close(); return; }
+
+    uint8_t* buf = (uint8_t*)heap_caps_malloc(len, MALLOC_CAP_SPIRAM);
+    if (!buf) buf = (uint8_t*)malloc(len);
+    if (!buf) { f.close(); return; }
+
+    size_t read = f.read(buf, len);
+    f.close();
+
+    if (read == len) {
+        // Scale to fit a 100×(H-14) square in the upper-left of the now-playing view.
+        display.drawJpg(buf, len, 0, 14, 100, H - 14);
+        s_art_loaded = true;
     }
+    free(buf);
 }
 
 void UIManager::showNotif(const char* text) {

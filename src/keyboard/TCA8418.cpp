@@ -28,19 +28,19 @@ static const struct {
     // Row 1
     { 11, KeyCode::NONE,   'q', KeyCode::NONE      },
     { 12, KeyCode::NONE,   'w', KeyCode::NONE      },
-    { 13, KeyCode::FN_E,   'e', KeyCode::FN_E      },
-    { 14, KeyCode::FN_R,   'r', KeyCode::FN_R      },
-    { 15, KeyCode::FN_T,   't', KeyCode::FN_T      },
+    { 13, KeyCode::NONE,   'e', KeyCode::FN_E      },
+    { 14, KeyCode::NONE,   'r', KeyCode::FN_R      },
+    { 15, KeyCode::NONE,   't', KeyCode::FN_T      },
     { 16, KeyCode::NONE,   'y', KeyCode::NONE      },
     { 17, KeyCode::NONE,   'u', KeyCode::NONE      },
     { 18, KeyCode::NONE,   'i', KeyCode::NONE      },
-    { 19, KeyCode::NONE,   'o', KeyCode::NONE      },
+    { 19, KeyCode::NONE,   'o', KeyCode::FN_O      },
     { 20, KeyCode::NONE,   'p', KeyCode::NONE      },
     // Row 2
     { 21, KeyCode::NONE,   'a', KeyCode::NONE      },
-    { 22, KeyCode::FN_S,   's', KeyCode::FN_S      },
+    { 22, KeyCode::NONE,   's', KeyCode::FN_S      },
     { 23, KeyCode::NONE,   'd', KeyCode::NONE      },
-    { 24, KeyCode::FN_F,   'f', KeyCode::FN_F      },
+    { 24, KeyCode::NONE,   'f', KeyCode::FN_F      },
     { 25, KeyCode::NONE,   'g', KeyCode::NONE      },
     { 26, KeyCode::NONE,   'h', KeyCode::NONE      },
     { 27, KeyCode::NONE,   'j', KeyCode::NONE      },
@@ -55,7 +55,7 @@ static const struct {
     { 35, KeyCode::NONE,   'v', KeyCode::NONE      },
     { 36, KeyCode::NONE,   'b', KeyCode::NONE      },
     { 37, KeyCode::NONE,   'n', KeyCode::NONE      },
-    { 38, KeyCode::FN_M,   'm', KeyCode::FN_M      },
+    { 38, KeyCode::NONE,   'm', KeyCode::FN_M      },
     { 39, KeyCode::PLUS,   '+', KeyCode::NONE      },
     { 40, KeyCode::MINUS,  '-', KeyCode::NONE      },
     // Row 4 — navigation row
@@ -64,7 +64,7 @@ static const struct {
     { 43, KeyCode::LEFT,   0,   KeyCode::FN_LEFT   },
     { 44, KeyCode::RIGHT,  0,   KeyCode::FN_RIGHT  },
     { 45, KeyCode::NONE,   ' ', KeyCode::NONE      },
-    { 46, KeyCode::FN_REC, 0,   KeyCode::FN_REC   },
+    { 46, KeyCode::FN_REC, 0,   KeyCode::FN_REC   },  // dedicated REC key
     { 0,  KeyCode::NONE,   0,   KeyCode::NONE      },  // sentinel
 };
 

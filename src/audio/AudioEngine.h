@@ -28,6 +28,7 @@ public:
     // EQ / DSP
     static void     setEQPreset(EQPreset preset, const int8_t custom[5]);
     static void     setFullSound(bool enabled);
+    static void     setMono(bool enabled);
 
     // State queries
     static PlaybackState state()     { return s_state; }
@@ -41,8 +42,7 @@ public:
     // Called by ESP32-audioI2S callback
     static void onEOF();
     static void onInfo(const char* info);
-    static void onError(const char* error);
-    static void onID3Tag(const char* type, const char* value);
+    static void onID3Tag(const char* info);
     static void onPCM(int16_t* data, size_t len);
 
 private:

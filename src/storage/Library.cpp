@@ -1,8 +1,24 @@
 #include "Library.h"
 #include <string.h>
 #include <stdlib.h>
+#include <ctype.h>
+#include <esp_heap_caps.h>
 
 static const TrackInfo EMPTY_TRACK = {};
+
+// Portable case-insensitive substring search (strcasestr is a GNU extension)
+static const char* ci_strstr(const char* haystack, const char* needle) {
+    if (!needle || !*needle) return haystack;
+    for (; *haystack; haystack++) {
+        const char* h = haystack;
+        const char* n = needle;
+        while (*h && *n && tolower((unsigned char)*h) == tolower((unsigned char)*n)) {
+            h++; n++;
+        }
+        if (!*n) return haystack;
+    }
+    return nullptr;
+}
 
 // Supported audio extensions
 static bool isAudioFile(const char* name) {
@@ -19,13 +35,21 @@ static bool isAudioFile(const char* name) {
 }
 
 Library::Library() {
-    memset(m_tracks, 0, sizeof(m_tracks));
+    // Track index lives in PSRAM — ~1.3 MB at full capacity, far too large for DRAM.
+    m_tracks = (TrackInfo*)heap_caps_malloc(sizeof(TrackInfo) * LIBRARY_MAX_TRACKS, MALLOC_CAP_SPIRAM);
+    if (!m_tracks) {
+        // Fallback to internal RAM with a much smaller cap would go here;
+        // PSRAM is mandatory per spec, so we expect this to succeed.
+        m_tracks = (TrackInfo*)malloc(sizeof(TrackInfo) * LIBRARY_MAX_TRACKS);
+    }
+    if (m_tracks) memset(m_tracks, 0, sizeof(TrackInfo) * LIBRARY_MAX_TRACKS);
     memset(m_artists, 0, sizeof(m_artists));
     memset(m_albums,  0, sizeof(m_albums));
     memset(m_genres,  0, sizeof(m_genres));
 }
 
 bool Library::scan() {
+    if (!m_tracks) return false;
     m_count = 0;
     m_artist_count = 0;
     m_album_count  = 0;
@@ -257,9 +281,9 @@ int Library::getFiltered(int* out, int max, const char* filter) const {
     int n = 0;
     for (int i = 0; i < m_count && n < max; i++) {
         if (!filter || filter[0] == '\0' ||
-            strcasestr(m_tracks[i].title,  filter) ||
-            strcasestr(m_tracks[i].artist, filter) ||
-            strcasestr(m_tracks[i].album,  filter)) {
+            ci_strstr(m_tracks[i].title,  filter) ||
+            ci_strstr(m_tracks[i].artist, filter) ||
+            ci_strstr(m_tracks[i].album,  filter)) {
             out[n++] = i;
         }
     }

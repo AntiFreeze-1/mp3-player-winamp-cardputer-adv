@@ -62,8 +62,8 @@ private:
     void parseVorbisComment(const char* path, TrackInfo& info);
     void indexArtistsAlbums();
 
-    TrackInfo m_tracks[LIBRARY_MAX_TRACKS];
-    int       m_count = 0;
+    TrackInfo* m_tracks = nullptr;   // allocated in PSRAM (see constructor)
+    int        m_count = 0;
     BrowseMode m_mode = BrowseMode::ALL_SONGS;
 
     // Unique artist/album/genre strings (pointers into track data)

@@ -10,5 +10,6 @@ public:
     static void savePlaybackMode(bool shuffle, RepeatMode repeat);
     static void saveTrackPosition(const char* path, uint32_t pos_ms);
     static void saveFullSound(bool enabled);
+    static void saveMono(bool enabled);
     static void saveSleepTimer(uint8_t idx);
 };

@@ -53,7 +53,7 @@ enum class KeyCode : uint8_t {
     ENTER, ESC,
     PLUS, MINUS,
     FN_LEFT, FN_RIGHT,
-    FN_S, FN_R, FN_E, FN_F, FN_T, FN_M, FN_REC,
+    FN_S, FN_R, FN_E, FN_F, FN_T, FN_M, FN_O, FN_REC,
     OK_LONG,
     CHAR_A = 0x40,  // printable characters start here
 };
@@ -86,6 +86,7 @@ struct AppState {
     EQPreset      eq_preset;
     int8_t        eq_custom[5];    // bands: 60Hz 250Hz 1kHz 4kHz 12kHz, ±12 dB
     bool          fullsound;
+    bool          mono;            // mono-sum L/R to both channels
     uint8_t       sleep_timer_idx; // index into SLEEP_TIMER_OPTIONS
     uint32_t      sleep_deadline;  // millis() when to sleep, 0=off
     bool          headphones_in;
