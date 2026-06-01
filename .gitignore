@@ -3,5 +3,6 @@
 *.pyc
 __pycache__/
 *.bin
+!firmware.bin
 *.elf
 *.map
