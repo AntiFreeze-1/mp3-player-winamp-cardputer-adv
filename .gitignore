@@ -1,27 +1,7 @@
-# Arduino
-*.hex
-*.elf
-*.bin
-!Winamp.bin
-!Winamp_merged.bin
-build/
-.vscode/
-.idea/
-
-# PlatformIO
 .pio/
-src/
-platformio.ini
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Logs
-*.log
-
-# Temporary files
-*~
-*.tmp
-*.backup
-
+.vscode/
+*.pyc
+__pycache__/
+*.bin
+*.elf
+*.map
