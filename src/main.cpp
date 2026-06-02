@@ -29,20 +29,27 @@ static SemaphoreHandle_t g_state_mutex;
 static QueueHandle_t     g_key_queue;
 
 // ── Boot diagnostics ───────────────────────────────────────────────────────
+// Per-task breadcrumb slots. With several tasks running concurrently a single
+// shared "last stage" string would race, so each task (and setup) gets its own
+// slot. On a crash we print every slot, which shows exactly how far each task
+// got — the one stuck mid-init, or the one that advanced just before the panic.
 #define BOOT_MAGIC 0xB007C0DEu
+enum BootSlot { SLOT_SETUP = 0, SLOT_AUDIO, SLOT_KBD, SLOT_UI, SLOT_REC, SLOT_BAT, SLOT_COUNT };
+static const char* SLOT_NAMES[SLOT_COUNT] = { "setup", "audio", "kbd", "ui", "rec", "bat" };
+
 RTC_NOINIT_ATTR static uint32_t g_boot_magic;
-RTC_NOINIT_ATTR static char     g_boot_last_stage[40];
+RTC_NOINIT_ATTR static char     g_boot_stages[SLOT_COUNT][28];
 static int g_boot_line = 0;
 
-static void markStage(const char* stage) {
-    strncpy(g_boot_last_stage, stage, sizeof(g_boot_last_stage) - 1);
-    g_boot_last_stage[sizeof(g_boot_last_stage) - 1] = '\0';
+static void markSlot(BootSlot slot, const char* stage) {
+    strncpy(g_boot_stages[slot], stage, sizeof(g_boot_stages[slot]) - 1);
+    g_boot_stages[slot][sizeof(g_boot_stages[slot]) - 1] = '\0';
     g_boot_magic = BOOT_MAGIC;
-    Serial.printf("[BOOT] %s\n", stage);
+    Serial.printf("[BOOT][%s] %s\n", SLOT_NAMES[slot], stage);
 }
 
 static void bootStage(const char* stage) {
-    markStage(stage);
+    markSlot(SLOT_SETUP, stage);
     M5.Display.setTextColor(TFT_GREEN, TFT_BLACK);
     M5.Display.setCursor(4, 4 + g_boot_line * 12);
     M5.Display.print(stage);
@@ -300,11 +307,16 @@ static void handleKey(const KeyEvent& ev, AppState& state) {
 // ══════════════════════════════════════════════════════════════════════════
 
 static void audioTask(void* arg) {
-    markStage("audio: begin");
+    markSlot(SLOT_AUDIO, "begin");
     AudioEngine::begin();
-    markStage("audio: ready");
+    markSlot(SLOT_AUDIO, "ready");
 
+    uint32_t beat = 0;
     for (;;) {
+        if ((beat++ & 0xFF) == 0) {
+            char m[28]; snprintf(m, sizeof(m), "loop %lu", (unsigned long)beat);
+            markSlot(SLOT_AUDIO, m);
+        }
         AudioEngine::loop();
 
         if (AudioEngine::isEOF()) {
@@ -354,11 +366,16 @@ static void audioTask(void* arg) {
 }
 
 static void keyboardTask(void* arg) {
-    markStage("kbd: begin");
+    markSlot(SLOT_KBD, "begin");
     TCA8418::begin();
-    markStage("kbd: ready");
+    markSlot(SLOT_KBD, "ready");
 
+    uint32_t beat = 0;
     for (;;) {
+        if ((beat++ & 0xFF) == 0) {
+            char m[28]; snprintf(m, sizeof(m), "loop %lu", (unsigned long)beat);
+            markSlot(SLOT_KBD, m);
+        }
         if (TCA8418::available()) {
             KeyEvent ev = TCA8418::nextKey();
             if (ev.code != KeyCode::NONE || ev.ch != 0)
@@ -374,11 +391,16 @@ static void keyboardTask(void* arg) {
 }
 
 static void uiTask(void* arg) {
-    markStage("ui: begin");
+    markSlot(SLOT_UI, "begin");
     UIManager::begin();
-    markStage("ui: ready");
+    markSlot(SLOT_UI, "ready");
 
+    uint32_t beat = 0;
     for (;;) {
+        if ((beat++ & 0x3F) == 0) {
+            char m[28]; snprintf(m, sizeof(m), "loop %lu", (unsigned long)beat);
+            markSlot(SLOT_UI, m);
+        }
         KeyEvent ev;
         while (xQueueReceive(g_key_queue, &ev, 0) == pdTRUE) {
             if (xSemaphoreTake(g_state_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
@@ -413,12 +435,16 @@ static void uiTask(void* arg) {
 }
 
 static void batteryTask(void* arg) {
+    markSlot(SLOT_BAT, "begin");
     BatteryMonitor::begin();
+    markSlot(SLOT_BAT, "ready");
     BatteryMonitor::task(arg);
 }
 
 static void recorderTask(void* arg) {
+    markSlot(SLOT_REC, "begin");
     VoiceRecorder::begin();
+    markSlot(SLOT_REC, "ready");
     VoiceRecorder::task(arg);
 }
 
@@ -448,18 +474,21 @@ void setup() {
     if (crashed) {
         M5.Display.fillScreen(TFT_RED);
         M5.Display.setTextColor(TFT_WHITE, TFT_RED);
-        M5.Display.setCursor(4, 4);
-        M5.Display.println("CRASH after stage:");
-        M5.Display.setTextSize(2);
-        M5.Display.println(g_boot_last_stage);
         M5.Display.setTextSize(1);
-        M5.Display.printf("\nreset reason = %d\n", (int)rr);
-        M5.Display.println("\n(holding 6s)");
-        delay(6000);
+        M5.Display.setCursor(2, 2);
+        M5.Display.printf("CRASH  reset reason = %d\n", (int)rr);
+        M5.Display.println("Last stage per task:");
+        for (int i = 0; i < SLOT_COUNT; i++) {
+            M5.Display.printf("  %-6s %s\n", SLOT_NAMES[i],
+                              g_boot_stages[i][0] ? g_boot_stages[i] : "(none)");
+        }
+        M5.Display.println("\n(holding 8s)");
+        delay(8000);
         M5.Display.fillScreen(TFT_BLACK);
     }
     g_boot_magic = 0;
     g_boot_line  = 0;
+    for (int i = 0; i < SLOT_COUNT; i++) g_boot_stages[i][0] = '\0';
 
     bootStage("M5 init OK");
 
@@ -529,7 +558,7 @@ void setup() {
     xTaskCreatePinnedToCore(batteryTask,  "BatTask",   BAT_TASK_STACK,   nullptr, 1, nullptr, 0);
 
     delay(50);
-    markStage("running");
+    markSlot(SLOT_SETUP, "running");
 }
 
 void loop() {
