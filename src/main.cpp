@@ -307,10 +307,7 @@ static void handleKey(const KeyEvent& ev, AppState& state) {
 // ══════════════════════════════════════════════════════════════════════════
 
 static void audioTask(void* arg) {
-    markSlot(SLOT_AUDIO, "begin");
-    AudioEngine::begin();
-    markSlot(SLOT_AUDIO, "ready");
-
+    // All hardware init happens in setup(); tasks only run their loops.
     uint32_t beat = 0;
     for (;;) {
         if ((beat++ & 0xFF) == 0) {
@@ -366,10 +363,6 @@ static void audioTask(void* arg) {
 }
 
 static void keyboardTask(void* arg) {
-    markSlot(SLOT_KBD, "begin");
-    TCA8418::begin();
-    markSlot(SLOT_KBD, "ready");
-
     uint32_t beat = 0;
     for (;;) {
         if ((beat++ & 0xFF) == 0) {
@@ -391,10 +384,6 @@ static void keyboardTask(void* arg) {
 }
 
 static void uiTask(void* arg) {
-    markSlot(SLOT_UI, "begin");
-    UIManager::begin();
-    markSlot(SLOT_UI, "ready");
-
     uint32_t beat = 0;
     for (;;) {
         if ((beat++ & 0x3F) == 0) {
@@ -435,16 +424,12 @@ static void uiTask(void* arg) {
 }
 
 static void batteryTask(void* arg) {
-    markSlot(SLOT_BAT, "begin");
-    BatteryMonitor::begin();
-    markSlot(SLOT_BAT, "ready");
+    markSlot(SLOT_BAT, "task");
     BatteryMonitor::task(arg);
 }
 
 static void recorderTask(void* arg) {
-    markSlot(SLOT_REC, "begin");
-    VoiceRecorder::begin();
-    markSlot(SLOT_REC, "ready");
+    markSlot(SLOT_REC, "task");
     VoiceRecorder::task(arg);
 }
 
@@ -550,6 +535,33 @@ void setup() {
     DSP::setFullSound(g_state.fullsound);
     DSP::setMono(g_state.mono);
 
+    // ── Initialise all hardware subsystems sequentially ───────────────────
+    // The FreeRTOS scheduler is already running here (setup() is itself a
+    // task), so there is no benefit to deferring init into the worker tasks —
+    // and doing so caused init-time races across both cores. Initialising in
+    // a defined order, single-threaded, also means the green boot log above
+    // pinpoints exactly which subsystem fails if one ever does.
+    bootStage("battery init");
+    BatteryMonitor::begin();
+
+    bootStage("recorder init");
+    VoiceRecorder::begin();
+
+    bootStage("keyboard init");
+    TCA8418::begin();
+
+    bootStage("audio init");
+    AudioEngine::begin();
+
+    bootStage("display init");
+    UIManager::begin();
+
+    // Apply persisted audio settings now that the engine exists
+    AudioEngine::setVolume(g_state.volume);
+    AudioEngine::setEQPreset(g_state.eq_preset, g_state.eq_custom);
+    AudioEngine::setFullSound(g_state.fullsound);
+    AudioEngine::setMono(g_state.mono);
+
     bootStage("starting tasks");
     xTaskCreatePinnedToCore(audioTask,    "AudioTask", AUDIO_TASK_STACK, nullptr, 5, nullptr, 1);
     xTaskCreatePinnedToCore(keyboardTask, "KbdTask",   KBD_TASK_STACK,   nullptr, 4, nullptr, 0);
@@ -557,7 +569,6 @@ void setup() {
     xTaskCreatePinnedToCore(recorderTask, "RecTask",   REC_TASK_STACK,   nullptr, 4, nullptr, 1);
     xTaskCreatePinnedToCore(batteryTask,  "BatTask",   BAT_TASK_STACK,   nullptr, 1, nullptr, 0);
 
-    delay(50);
     markSlot(SLOT_SETUP, "running");
 }
 
