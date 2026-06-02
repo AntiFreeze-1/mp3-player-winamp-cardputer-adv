@@ -108,7 +108,10 @@ void TCA8418::begin() {
 }
 
 bool TCA8418::available() {
-    if (!irq_flag) return false;
+    // Poll the key-event counter directly rather than gating on the hardware
+    // IRQ flag. The INT line (GPIO11) wiring/polarity isn't guaranteed on this
+    // board, and a missed FALLING edge would silently wedge input forever.
+    // The counter (lower nibble of KEY_LCK_EC) is the source of truth.
     uint8_t ec = readReg(TCA8418_REG_KEY_LCK_EC) & 0x0F;
     return ec > 0;
 }

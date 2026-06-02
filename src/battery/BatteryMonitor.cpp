@@ -1,5 +1,6 @@
 #include "BatteryMonitor.h"
 #include <Arduino.h>
+#include <M5Unified.h>
 #include <driver/adc.h>
 
 int      BatteryMonitor::s_pct     = 0;
@@ -17,6 +18,9 @@ static const struct { uint32_t mv; int pct; } LIPO_CURVE[] = {
 static const int LIPO_CURVE_LEN = sizeof(LIPO_CURVE) / sizeof(LIPO_CURVE[0]);
 
 void BatteryMonitor::begin() {
+    // Prefer M5Unified's power-management abstraction, which knows the actual
+    // battery-sense wiring for this board. The raw GPIO4 ADC path is kept only
+    // as a fallback for boards M5.Power cannot read.
     analogReadResolution(12);
     analogSetAttenuation(ADC_11db);
     pinMode(PIN_BATT_ADC, INPUT);
@@ -24,21 +28,27 @@ void BatteryMonitor::begin() {
 }
 
 void BatteryMonitor::update() {
-    // Average 8 samples to reduce ADC noise
+    // M5.Power.getBatteryLevel() returns 0–100, or -1 if the board has no
+    // supported battery gauge.
+    int32_t level = M5.Power.getBatteryLevel();
+    if (level >= 0) {
+        s_pct = level;
+        int16_t mv = M5.Power.getBatteryVoltage();   // millivolts, -1 if unknown
+        s_mv = (mv > 0) ? (uint32_t)mv : 0;
+        s_charging = (M5.Power.isCharging() == m5::Power_Class::is_charging);
+        return;
+    }
+
+    // ── Fallback: raw ADC on PIN_BATT_ADC ────────────────────────────────
     uint32_t raw = 0;
     for (int i = 0; i < 8; i++) raw += analogRead(PIN_BATT_ADC);
     raw /= 8;
 
-    // Convert ADC reading to mV, accounting for voltage divider
     // ADC range 0–4095 = 0–3300 mV (with 11dB attenuation ~3.3V)
     uint32_t adc_mv = (raw * 3300UL) / 4095;
     s_mv = adc_mv * BATT_ADC_DIV;
 
     s_pct = voltToPercent(s_mv);
-
-    // Charging detection: if voltage rising over 4.15V while on USB,
-    // approximate by checking if GPIO USB_DETECT is high (if available).
-    // Simple heuristic: if ADC shows >4.15V, likely charging.
     s_charging = (s_mv > 4150);
 }
 
