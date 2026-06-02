@@ -53,8 +53,8 @@ static const uint16_t SLEEP_TIMER_OPTIONS[] = {0, 15, 30, 45, 60, 90};
 #define SLEEP_TIMER_COUNT 6
 
 // ── FreeRTOS ───────────────────────────────────────────────────────────────
-#define AUDIO_TASK_STACK    8192
-#define UI_TASK_STACK       6144
+#define AUDIO_TASK_STACK   20480   // Audio::loop() is large; needs headroom
+#define UI_TASK_STACK      12288   // AppState on stack + M5GFX render depth
 #define KBD_TASK_STACK      2048
 #define REC_TASK_STACK      6144
 #define BAT_TASK_STACK      1024

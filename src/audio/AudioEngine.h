@@ -46,7 +46,7 @@ public:
     static void onPCM(int16_t* data, size_t len);
 
 private:
-    static Audio        s_audio;
+    static Audio*        s_audio;   // constructed in begin(), not at global-init time
     static PlaybackState s_state;
     static uint8_t      s_vol;
     static bool         s_muted;

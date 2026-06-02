@@ -429,6 +429,10 @@ static void recorderTask(void* arg) {
 void setup() {
     auto cfg = M5.config();
     M5.begin(cfg);
+    // Release M5Unified's I2S driver claim so AudioEngine can install its own.
+    // Without this, the Audio constructor's i2s_driver_install(I2S_NUM_0) would
+    // conflict with the speaker driver M5Unified just installed.
+    M5.Speaker.end();
     Serial.begin(115200);
     delay(200);
 
