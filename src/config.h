@@ -55,7 +55,7 @@ static const uint16_t SLEEP_TIMER_OPTIONS[] = {0, 15, 30, 45, 60, 90};
 // ── FreeRTOS ───────────────────────────────────────────────────────────────
 #define AUDIO_TASK_STACK   20480   // Audio::loop() is large; needs headroom
 #define UI_TASK_STACK      12288   // AppState on stack + M5GFX render depth
-#define KBD_TASK_STACK      2048
+#define KBD_TASK_STACK      4096   // Wire I2C + Serial.printf in markSlot
 #define REC_TASK_STACK      6144
-#define BAT_TASK_STACK      1024
+#define BAT_TASK_STACK      4096   // analogRead x8 + Serial.printf in markSlot
 #define KEY_QUEUE_LEN       16
