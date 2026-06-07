@@ -68,17 +68,19 @@ static void setTrackName(AppState& state, const char* path) {
 }
 
 // ── Helper: start playing a file by path ──────────────────────────────────
+// PRECONDITION: the caller must already hold g_state_mutex. Every call site
+// (handleKey in the UI task, and the EOF auto-advance in the audio task) runs
+// inside the mutex, so this function must NOT re-acquire it — g_state_mutex is
+// a plain (non-recursive) mutex, and a nested take would simply time out and
+// silently skip the state update, leaving the UI showing the wrong track.
 static void playPath(const char* path) {
     AudioEngine::play(path);
-    if (xSemaphoreTake(g_state_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
-        strncpy(g_state.current_track_path, path,
-                sizeof(g_state.current_track_path) - 1);
-        g_state.current_track_path[sizeof(g_state.current_track_path)-1] = '\0';
-        setTrackName(g_state, path);
-        g_state.track_pos_ms = 0;
-        g_state.playback     = PlaybackState::PLAYING;
-        xSemaphoreGive(g_state_mutex);
-    }
+    strncpy(g_state.current_track_path, path,
+            sizeof(g_state.current_track_path) - 1);
+    g_state.current_track_path[sizeof(g_state.current_track_path)-1] = '\0';
+    setTrackName(g_state, path);
+    g_state.track_pos_ms = 0;
+    g_state.playback     = PlaybackState::PLAYING;
     UIManager::loadAlbumArt(path, false);
 }
 
@@ -527,7 +529,11 @@ void setup() {
         setTrackName(g_state, last_track);
         g_state.track_pos_ms   = last_pos_ms;
         g_state.current_screen = Screen::NOW_PLAYING;
-        g_state.playback       = PlaybackState::PAUSED;
+        // The decoder has nothing loaded yet, so the engine is really STOPPED.
+        // Marking it PAUSED would send the next Enter into the resume() branch,
+        // which no-ops (engine isn't paused) and the track would never start.
+        // STOPPED makes Enter call playPath() and actually begin playback.
+        g_state.playback       = PlaybackState::STOPPED;
     }
 
     DSP::init(48000.0f);

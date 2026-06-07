@@ -1,4 +1,5 @@
 #include "AudioEngine.h"
+#include "ES8311.h"
 #include <Arduino.h>
 #include <math.h>
 
@@ -37,6 +38,11 @@ void AudioEngine::begin() {
 
     s_audio->setPinout(PIN_I2S_BCLK, PIN_I2S_LRCLK, PIN_I2S_DOUT);
     s_audio->setVolume(volToI2S(s_vol));
+
+    // Configure the ES8311 codec now that the I2S pins are routed. Without this
+    // the codec stays powered down and no audio reaches the amplifier. Done
+    // after setPinout() so BCLK (the codec's clock source) is already assigned.
+    ES8311::begin();
 
     pinMode(PIN_HP_DETECT, INPUT_PULLUP);
 
