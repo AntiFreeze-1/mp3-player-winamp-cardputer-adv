@@ -39,6 +39,10 @@ public:
     // Headphone detection
     static bool headphonesIn();
 
+    // Re-assert I2S pin routing after another peripheral (e.g. VoiceRecorder)
+    // has stolen the shared BCLK/LRCLK GPIO lines.
+    static void restorePins();
+
     // Called by ESP32-audioI2S callback
     static void onEOF();
     static void onInfo(const char* info);

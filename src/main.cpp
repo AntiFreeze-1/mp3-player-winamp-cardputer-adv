@@ -91,13 +91,20 @@ static void updateAudioRouting(AppState& state) {
 }
 
 // ── Helper: sleep timer check ─────────────────────────────────────────────
+// PRECONDITION: caller must hold g_state_mutex (or be in setup, single-threaded).
 static void checkSleepTimer(AppState& state) {
     if (state.sleep_deadline == 0) return;
-    if (millis() >= state.sleep_deadline &&
-        state.playback == PlaybackState::STOPPED) {
-        NVSConfig::save(state, state.current_track_path, state.track_pos_ms);
-        esp_deep_sleep_start();
+    if (millis() < state.sleep_deadline) return;
+
+    // Deadline passed — stop any active playback then enter deep sleep.
+    if (state.playback == PlaybackState::PLAYING ||
+        state.playback == PlaybackState::PAUSED) {
+        AudioEngine::stop();
+        state.playback = PlaybackState::STOPPED;
     }
+    state.sleep_deadline = 0;
+    NVSConfig::save(state, state.current_track_path, state.track_pos_ms);
+    esp_deep_sleep_start();
 }
 
 // ── Key event handler (runs in UITask) ────────────────────────────────────
@@ -349,15 +356,27 @@ static void audioTask(void* arg) {
             }
         }
 
-        // Save position every 5 s
+        // Periodic 5s housekeeping: sync position, check sleep timer, persist position
         static uint32_t last_save = 0;
         if (millis() - last_save > 5000) {
             last_save = millis();
+            char snap_path[128] = {0};
+            uint32_t snap_pos = 0;
+            bool should_save = false;
             if (xSemaphoreTake(g_state_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
                 g_state.track_pos_ms = AudioEngine::positionMs();
                 g_state.playback     = AudioEngine::state();
+                checkSleepTimer(g_state);  // fires esp_deep_sleep_start() if deadline passed
+                if (g_state.playback == PlaybackState::PLAYING &&
+                    g_state.current_track_path[0]) {
+                    strncpy(snap_path, g_state.current_track_path, sizeof(snap_path) - 1);
+                    snap_pos   = g_state.track_pos_ms;
+                    should_save = true;
+                }
                 xSemaphoreGive(g_state_mutex);
             }
+            // Persist resume position outside the mutex to avoid holding it during NVS I/O
+            if (should_save) NVSConfig::saveTrackPosition(snap_path, snap_pos);
         }
 
         vTaskDelay(pdMS_TO_TICKS(10));
@@ -401,24 +420,23 @@ static void uiTask(void* arg) {
             }
         }
 
+        // Snapshot state once (with mutex) so both draw paths see the same data.
+        AppState snap;
         if (xSemaphoreTake(g_state_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
             g_state.track_pos_ms = AudioEngine::positionMs();
             g_state.playback     = AudioEngine::state();
             g_state.battery_pct  = BatteryMonitor::percent();
             g_state.charging     = BatteryMonitor::isCharging();
+            snap = g_state;
             xSemaphoreGive(g_state_mutex);
         }
 
-        if (g_state.current_screen == Screen::VOICE_RECORDER) {
-            UIManager::drawRecorder(g_state,
+        if (snap.current_screen == Screen::VOICE_RECORDER) {
+            UIManager::drawRecorder(snap,
                                     VoiceRecorder::elapsedMs(),
                                     VoiceRecorder::peakLevel());
         } else {
-            if (xSemaphoreTake(g_state_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
-                AppState snap = g_state;
-                xSemaphoreGive(g_state_mutex);
-                UIManager::draw(snap, g_lib, g_playlist);
-            }
+            UIManager::draw(snap, g_lib, g_playlist);
         }
 
         vTaskDelay(pdMS_TO_TICKS(33));
@@ -535,11 +553,6 @@ void setup() {
         // STOPPED makes Enter call playPath() and actually begin playback.
         g_state.playback       = PlaybackState::STOPPED;
     }
-
-    DSP::init(48000.0f);
-    DSP::setEQPreset(g_state.eq_preset, g_state.eq_custom);
-    DSP::setFullSound(g_state.fullsound);
-    DSP::setMono(g_state.mono);
 
     // ── Initialise all hardware subsystems sequentially ───────────────────
     // The FreeRTOS scheduler is already running here (setup() is itself a

@@ -4,6 +4,7 @@
 #include <string.h>
 #include <stdio.h>
 #include "../config.h"
+#include "../audio/AudioEngine.h"
 
 SemaphoreHandle_t VoiceRecorder::sd_mutex = nullptr;
 RecordState  VoiceRecorder::s_state    = RecordState::IDLE;
@@ -164,13 +165,21 @@ void VoiceRecorder::task(void* arg) {
                 }
             }
         } else if (s_state == RecordState::STOPPING) {
-            // Patch WAV header
+            // Patch WAV header and close file
             if (xSemaphoreTake(sd_mutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
                 updateWAVHeader(s_file, total_samples);
                 s_file.close();
                 xSemaphoreGive(sd_mutex);
+            } else {
+                // Mutex timed out — close without header update to avoid leaking the fd.
+                s_file.close();
             }
             i2s_driver_uninstall(REC_I2S_PORT);
+            // Restore AudioEngine's BCLK/LRCLK GPIO routing.  I2S_NUM_1 was
+            // installed on the same clock pins; uninstalling it leaves the GPIO
+            // matrix pointed at the (now-gone) I2S1 peripheral.  Calling
+            // restorePins() makes I2S_NUM_0 reclaim those lines.
+            AudioEngine::restorePins();
             total_samples = 0;
             s_state = RecordState::IDLE;
         } else {

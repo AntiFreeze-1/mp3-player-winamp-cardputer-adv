@@ -127,6 +127,14 @@ bool AudioEngine::headphonesIn() {
     return digitalRead(PIN_HP_DETECT) == LOW;
 }
 
+void AudioEngine::restorePins() {
+    if (!s_audio) return;
+    // Re-assert BCLK/LRCLK/DOUT in the GPIO matrix.  The VoiceRecorder
+    // installs I2S_NUM_1 on these same pins, which steals them from I2S_NUM_0.
+    // Calling setPinout() again routes them back to AudioEngine.
+    s_audio->setPinout(PIN_I2S_BCLK, PIN_I2S_LRCLK, PIN_I2S_DOUT);
+}
+
 void AudioEngine::onEOF() {
     s_eof   = true;
     s_state = PlaybackState::STOPPED;

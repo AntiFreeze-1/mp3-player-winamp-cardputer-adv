@@ -327,9 +327,10 @@ void UIManager::loadAlbumArt(const char* track_path, bool has_embedded) {
     char* slash = strrchr(art_path, '/');
     if (!slash) return;
 
-    strcpy(slash + 1, "cover.jpg");
+    size_t rem = sizeof(art_path) - (size_t)(slash + 1 - art_path);
+    snprintf(slash + 1, rem, "cover.jpg");
     if (!SD.exists(art_path)) {
-        strcpy(slash + 1, "folder.jpg");
+        snprintf(slash + 1, rem, "folder.jpg");
         if (!SD.exists(art_path)) return;
     }
 
