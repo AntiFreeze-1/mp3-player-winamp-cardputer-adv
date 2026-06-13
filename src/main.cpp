@@ -394,7 +394,15 @@ static void audioTask(void* arg) {
             if (should_save) NVSConfig::saveTrackPosition(snap_path, snap_pos);
         }
 
-        vTaskDelay(pdMS_TO_TICKS(10));
+        // While playing, feed the decoder as fast as it needs: Audio::loop()
+        // blocks on i2s_write until the DMA buffer has room, so it already
+        // paces itself to realtime AND yields the CPU to other tasks. Adding a
+        // fixed 10ms idle here would cap throughput well below realtime (one
+        // ~26ms MP3 frame per call + 10ms idle ≈ 72% realtime) and cause
+        // constant underruns — glitchy, dragging audio. Only sleep longer when
+        // stopped, where loop() returns immediately and would otherwise spin.
+        vTaskDelay(AudioEngine::state() == PlaybackState::PLAYING
+                   ? 1 : pdMS_TO_TICKS(10));
     }
 }
 
