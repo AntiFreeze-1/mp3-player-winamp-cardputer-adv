@@ -1,6 +1,7 @@
 #include "Library.h"
 #include <string.h>
 #include <ctype.h>
+#include <esp_system.h>  // esp_random()
 
 static const Library::Entry EMPTY_ENTRY = {};
 
@@ -50,16 +51,13 @@ void Library::loadEntries() {
     }
     dir.close();
 
-    // Stable-partition: directories before audio files
-    for (int i = 1; i < m_count; i++) {
-        if (m_entries[i].is_dir && !m_entries[i - 1].is_dir) {
-            for (int j = i; j > 0 && m_entries[j].is_dir && !m_entries[j - 1].is_dir; j--) {
-                Entry tmp     = m_entries[j];
-                m_entries[j]  = m_entries[j - 1];
-                m_entries[j - 1] = tmp;
-            }
-        }
-    }
+    // Sort: directories first, then alphabetical (case-insensitive) within each group.
+    qsort(m_entries, m_count, sizeof(Entry), [](const void* a, const void* b) -> int {
+        const Entry* ea = static_cast<const Entry*>(a);
+        const Entry* eb = static_cast<const Entry*>(b);
+        if (ea->is_dir != eb->is_dir) return ea->is_dir ? -1 : 1;
+        return strcasecmp(ea->name, eb->name);
+    });
 }
 
 const Library::Entry& Library::entry(int i) const {
@@ -99,6 +97,22 @@ void Library::goUp() {
         *slash = '\0';
     }
     loadEntries();
+}
+
+bool Library::getRandomTrack(const char* current_path, char* out, size_t out_size) const {
+    const char* fname = strrchr(current_path, '/');
+    fname = fname ? fname + 1 : current_path;
+
+    // Collect indices of audio files that are not the current track.
+    int candidates[MAX_ENTRIES];
+    int n = 0;
+    for (int i = 0; i < m_count; i++) {
+        if (!m_entries[i].is_dir && strcmp(m_entries[i].name, fname) != 0)
+            candidates[n++] = i;
+    }
+    if (n == 0) return false;
+
+    return getFullPath(candidates[esp_random() % (uint32_t)n], out, out_size);
 }
 
 bool Library::getAdjacentTrack(const char* path, int direction,

@@ -334,8 +334,11 @@ static void audioTask(void* arg) {
                     playPath(s.current_track_path);
                 } else {
                     char next[128];
-                    if (g_lib.getAdjacentTrack(s.current_track_path, 1,
-                                                next, sizeof(next))) {
+                    bool found = s.shuffle
+                        ? g_lib.getRandomTrack(s.current_track_path, next, sizeof(next))
+                        : g_lib.getAdjacentTrack(s.current_track_path, 1, next, sizeof(next));
+
+                    if (found) {
                         playPath(next);
                     } else if (s.repeat == RepeatMode::ALL) {
                         // Wrap around: find first audio file in current dir

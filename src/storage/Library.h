@@ -27,6 +27,10 @@ public:
     bool getFullPath(int idx, char* out, size_t out_size) const;
     bool isAudioFile(int idx) const;
 
+    // Returns a random audio file path from the current listing, excluding
+    // current_path. Returns false only if fewer than 2 audio files exist.
+    bool getRandomTrack(const char* current_path, char* out, size_t out_size) const;
+
     // Returns the full path of the next (dir>0) or previous (dir<0) audio
     // file in the current listing relative to `current_path`. Returns false
     // if there is no adjacent audio file.
