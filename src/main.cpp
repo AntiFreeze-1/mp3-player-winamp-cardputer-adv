@@ -154,7 +154,15 @@ static void handleKey(const KeyEvent& ev, AppState& state) {
                     AudioEngine::resume();
                     state.playback = PlaybackState::PLAYING;
                 } else if (state.current_track_path[0]) {
+                    // Resuming a track restored from NVS at boot. Capture the
+                    // saved position before playPath() zeroes it, then seek
+                    // once the decoder has the file open.
+                    uint32_t resume_ms = state.track_pos_ms;
                     playPath(state.current_track_path);
+                    if (resume_ms > 3000) {
+                        AudioEngine::seekMs(resume_ms);
+                        state.track_pos_ms = resume_ms;
+                    }
                 }
             } else if (state.current_screen == Screen::SLEEP_TIMER) {
                 uint16_t mins = SLEEP_TIMER_OPTIONS[state.sleep_timer_idx];
@@ -367,8 +375,12 @@ static void audioTask(void* arg) {
             uint32_t snap_pos = 0;
             bool should_save = false;
             if (xSemaphoreTake(g_state_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
-                g_state.track_pos_ms = AudioEngine::positionMs();
-                g_state.playback     = AudioEngine::state();
+                PlaybackState est = AudioEngine::state();
+                g_state.playback  = est;
+                // Don't clobber a boot-restored resume position while STOPPED:
+                // positionMs() reads 0 until playback actually starts.
+                if (est != PlaybackState::STOPPED)
+                    g_state.track_pos_ms = AudioEngine::positionMs();
                 checkSleepTimer(g_state);  // fires esp_deep_sleep_start() if deadline passed
                 if (g_state.playback == PlaybackState::PLAYING &&
                     g_state.current_track_path[0]) {
@@ -426,8 +438,11 @@ static void uiTask(void* arg) {
         // Snapshot state once (with mutex) so both draw paths see the same data.
         AppState snap;
         if (xSemaphoreTake(g_state_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
-            g_state.track_pos_ms = AudioEngine::positionMs();
-            g_state.playback     = AudioEngine::state();
+            PlaybackState est = AudioEngine::state();
+            g_state.playback  = est;
+            // Preserve a boot-restored resume position until playback begins.
+            if (est != PlaybackState::STOPPED)
+                g_state.track_pos_ms = AudioEngine::positionMs();
             g_state.battery_pct  = BatteryMonitor::percent();
             g_state.charging     = BatteryMonitor::isCharging();
             snap = g_state;
