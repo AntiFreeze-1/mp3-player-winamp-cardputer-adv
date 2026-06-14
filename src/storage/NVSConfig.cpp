@@ -14,7 +14,8 @@ void NVSConfig::load(AppState& state, char* last_track_out, uint32_t* last_pos_m
     state.mono         = prefs.getBool("mono", false);
     state.shuffle      = prefs.getBool("shuffle", false);
     state.repeat       = (RepeatMode)prefs.getUChar("repeat_mode", 0);
-    state.sleep_timer_idx = prefs.getUChar("sleep_timer", 0);
+    state.sleep_timer_idx     = prefs.getUChar("sleep_timer",     0);
+    state.screen_timeout_idx  = prefs.getUChar("screen_timeout",  1);  // default: Dim 15s/Off 30s
 
     // Clamp volume in case stored value is out of range
     if (state.volume > VOLUME_MAX) state.volume = VOLUME_DEFAULT;
@@ -45,7 +46,8 @@ void NVSConfig::save(const AppState& state, const char* last_track, uint32_t las
     prefs.putBool ("mono",         state.mono);
     prefs.putBool ("shuffle",      state.shuffle);
     prefs.putUChar("repeat_mode",  (uint8_t)state.repeat);
-    prefs.putUChar("sleep_timer",  state.sleep_timer_idx);
+    prefs.putUChar("sleep_timer",     state.sleep_timer_idx);
+    prefs.putUChar("screen_timeout",  state.screen_timeout_idx);
     for (int i = 0; i < 5; i++) {
         char key[16];
         snprintf(key, sizeof(key), "eq_custom_%d", i);
@@ -102,5 +104,11 @@ void NVSConfig::saveMono(bool enabled) {
 void NVSConfig::saveSleepTimer(uint8_t idx) {
     prefs.begin(NVS_NAMESPACE, false);
     prefs.putUChar("sleep_timer", idx);
+    prefs.end();
+}
+
+void NVSConfig::saveScreenTimeout(uint8_t idx) {
+    prefs.begin(NVS_NAMESPACE, false);
+    prefs.putUChar("screen_timeout", idx);
     prefs.end();
 }

@@ -28,6 +28,9 @@ static PlaylistManager g_playlist;
 static SemaphoreHandle_t g_state_mutex;
 static QueueHandle_t     g_key_queue;
 
+// Last time any key was pressed — written by uiTask, read by uiTask (no mutex needed).
+static uint32_t g_last_activity_ms = 0;
+
 // ── Boot diagnostics ───────────────────────────────────────────────────────
 // Per-task breadcrumb slots. With several tasks running concurrently a single
 // shared "last stage" string would race, so each task (and setup) gets its own
@@ -119,6 +122,8 @@ static void handleKey(const KeyEvent& ev, AppState& state) {
                 if (state.lib_cursor > 0) state.lib_cursor--;
             } else if (state.current_screen == Screen::SLEEP_TIMER) {
                 if (state.sleep_timer_idx > 0) state.sleep_timer_idx--;
+            } else if (state.current_screen == Screen::SCREEN_TIMEOUT) {
+                if (state.screen_timeout_idx > 0) state.screen_timeout_idx--;
             }
             break;
 
@@ -128,6 +133,9 @@ static void handleKey(const KeyEvent& ev, AppState& state) {
             } else if (state.current_screen == Screen::SLEEP_TIMER) {
                 if (state.sleep_timer_idx < SLEEP_TIMER_COUNT - 1)
                     state.sleep_timer_idx++;
+            } else if (state.current_screen == Screen::SCREEN_TIMEOUT) {
+                if (state.screen_timeout_idx < SCREEN_TIMEOUT_COUNT - 1)
+                    state.screen_timeout_idx++;
             }
             break;
 
@@ -170,6 +178,14 @@ static void handleKey(const KeyEvent& ev, AppState& state) {
                 NVSConfig::saveSleepTimer(state.sleep_timer_idx);
                 state.current_screen = Screen::NOW_PLAYING;
                 UIManager::showNotif(mins > 0 ? "Timer set" : "Timer off");
+            } else if (state.current_screen == Screen::SCREEN_TIMEOUT) {
+                NVSConfig::saveScreenTimeout(state.screen_timeout_idx);
+                state.current_screen = Screen::NOW_PLAYING;
+                static const char* TIMEOUT_LABELS[SCREEN_TIMEOUT_COUNT] = {
+                    "Screen: never dim", "Screen: 15s/30s",
+                    "Screen: 30s/60s",  "Screen: 60s/2min"
+                };
+                UIManager::showNotif(TIMEOUT_LABELS[state.screen_timeout_idx]);
             }
             break;
 
@@ -283,6 +299,11 @@ static void handleKey(const KeyEvent& ev, AppState& state) {
         // ── Sleep timer ───────────────────────────────────────────────────
         case KeyCode::FN_T:
             state.current_screen = Screen::SLEEP_TIMER;
+            break;
+
+        // ── Screen dim/off timer ──────────────────────────────────────────
+        case KeyCode::FN_D:
+            state.current_screen = Screen::SCREEN_TIMEOUT;
             break;
 
         // ── Mute ──────────────────────────────────────────────────────────
@@ -435,7 +456,14 @@ static void uiTask(void* arg) {
             markSlot(SLOT_UI, m);
         }
         KeyEvent ev;
+        static uint8_t s_brightness = SCREEN_BRIGHTNESS_NORMAL;
         while (xQueueReceive(g_key_queue, &ev, 0) == pdTRUE) {
+            g_last_activity_ms = millis();
+            // Wake display on any key press
+            if (s_brightness != SCREEN_BRIGHTNESS_NORMAL) {
+                M5.Display.setBrightness(SCREEN_BRIGHTNESS_NORMAL);
+                s_brightness = SCREEN_BRIGHTNESS_NORMAL;
+            }
             if (xSemaphoreTake(g_state_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
                 handleKey(ev, g_state);
                 updateAudioRouting(g_state);
@@ -463,6 +491,23 @@ static void uiTask(void* arg) {
                                     VoiceRecorder::peakLevel());
         } else {
             UIManager::draw(snap, g_lib, g_playlist);
+        }
+
+        // Screen dim / off based on inactivity
+        {
+            uint32_t idle = millis() - g_last_activity_ms;
+            uint8_t tidx  = snap.screen_timeout_idx;
+            uint8_t want  = SCREEN_BRIGHTNESS_NORMAL;
+            if (tidx > 0) {
+                uint32_t dim_ms = (uint32_t)SCREEN_TIMEOUT_SECS[tidx][0] * 1000;
+                uint32_t off_ms = (uint32_t)SCREEN_TIMEOUT_SECS[tidx][1] * 1000;
+                if (off_ms > 0 && idle >= off_ms)    want = 0;
+                else if (dim_ms > 0 && idle >= dim_ms) want = SCREEN_BRIGHTNESS_DIM;
+            }
+            if (want != s_brightness) {
+                M5.Display.setBrightness(want);
+                s_brightness = want;
+            }
         }
 
         vTaskDelay(pdMS_TO_TICKS(33));
@@ -556,7 +601,7 @@ void setup() {
     uint32_t last_pos_ms = 0;
     NVSConfig::load(g_state, last_track, &last_pos_ms);
 
-    // Defaults
+    // Defaults (NVSConfig::load has already populated the persisted fields)
     g_state.playback       = PlaybackState::STOPPED;
     g_state.headphones_in  = false;
     g_state.battery_pct    = 0;
@@ -565,6 +610,7 @@ void setup() {
     g_state.lib_cursor     = 0;
     g_state.sleep_deadline = 0;
     g_state.muted          = false;
+    g_last_activity_ms     = millis();  // treat boot as activity so screen stays on initially
 
     // Resume last track if one was saved
     if (last_track[0] != '\0') {

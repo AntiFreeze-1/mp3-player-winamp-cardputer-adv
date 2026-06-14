@@ -52,6 +52,18 @@
 static const uint16_t SLEEP_TIMER_OPTIONS[] = {0, 15, 30, 45, 60, 90};
 #define SLEEP_TIMER_COUNT 6
 
+// ── Screen dim / off timeouts ──────────────────────────────────────────────
+// Each row: [dim_after_secs, off_after_secs]. 0 in both = never timeout.
+static const uint8_t SCREEN_TIMEOUT_SECS[][2] = {
+    {  0,   0 },   // Never
+    { 15,  30 },   // Dim 15 s → off 30 s
+    { 30,  60 },   // Dim 30 s → off 60 s
+    { 60, 120 },   // Dim 60 s → off 120 s
+};
+#define SCREEN_TIMEOUT_COUNT 4
+#define SCREEN_BRIGHTNESS_NORMAL 128
+#define SCREEN_BRIGHTNESS_DIM     20
+
 // ── FreeRTOS ───────────────────────────────────────────────────────────────
 #define AUDIO_TASK_STACK   20480   // Audio::loop() is large; needs headroom
 #define UI_TASK_STACK      12288   // AppState on stack + M5GFX render depth

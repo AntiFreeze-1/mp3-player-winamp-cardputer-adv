@@ -13,8 +13,9 @@ char     UIManager::s_notif[64]   = {0};
 uint32_t UIManager::s_notif_until = 0;
 int      UIManager::s_lib_scroll  = 0;
 
-static constexpr int W = 240;
-static constexpr int H = 135;
+static constexpr int W      = 240;
+static constexpr int H      = 135;
+static constexpr int HINT_H = 9;   // reserved at the bottom for key hints
 
 static constexpr uint16_t COL_BG       = 0x0000;
 static constexpr uint16_t COL_FG       = 0xFFFF;
@@ -50,12 +51,25 @@ void UIManager::draw(const AppState& state, const Library& lib,
     canvas.fillScreen(COL_BG);
 
     switch (state.current_screen) {
-        case Screen::NOW_PLAYING:    drawNowPlaying(state, lib);  break;
-        case Screen::LIBRARY:        drawLibrary(state, lib);     break;
-        case Screen::EQ_SETTINGS:    drawEQSettings(state);       break;
-        case Screen::SLEEP_TIMER:    drawSleepTimer(state);       break;
-        case Screen::SETTINGS:       drawSettings(state);         break;
+        case Screen::NOW_PLAYING:    drawNowPlaying(state, lib);   break;
+        case Screen::LIBRARY:        drawLibrary(state, lib);      break;
+        case Screen::EQ_SETTINGS:    drawEQSettings(state);        break;
+        case Screen::SLEEP_TIMER:    drawSleepTimer(state);        break;
+        case Screen::SCREEN_TIMEOUT: drawScreenTimeout(state);     break;
+        case Screen::SETTINGS:       drawSettings(state);          break;
         case Screen::VOICE_RECORDER: break;
+        default: break;
+    }
+
+    // Hint bar at bottom of every interactive screen
+    switch (state.current_screen) {
+        case Screen::NOW_PLAYING:
+            drawHintBar(",=prev /=next  Entr=pause  =/- vol  ESC=list");  break;
+        case Screen::LIBRARY:
+            drawHintBar(";=up .=dn  Entr=open  ESC=back  =/- vol");       break;
+        case Screen::SLEEP_TIMER:
+        case Screen::SCREEN_TIMEOUT:
+            drawHintBar(";=up .=dn  Entr=set  ESC=cancel");               break;
         default: break;
     }
 
@@ -99,6 +113,15 @@ void UIManager::drawStatusBar(const AppState& state) {
     canvas.setTextDatum(textdatum_t::top_left);
 }
 
+void UIManager::drawHintBar(const char* text) {
+    canvas.drawFastHLine(0, H - HINT_H - 1, W, COL_DIM);
+    canvas.setTextColor(COL_DIM, COL_BG);
+    canvas.setTextDatum(textdatum_t::bottom_left);
+    canvas.drawString(text, 2, H - 1);
+    canvas.setTextDatum(textdatum_t::top_left);
+    canvas.setTextColor(COL_FG, COL_BG);
+}
+
 void UIManager::drawNowPlaying(const AppState& state, const Library& lib) {
     (void)lib;
 
@@ -137,10 +160,11 @@ void UIManager::drawNowPlaying(const AppState& state, const Library& lib) {
     }
     canvas.drawString(dir, tx, y); y += 11;
 
-    // Progress bar (elapsed / no total since we skip pre-scan)
-    canvas.fillRect(tx, y, W - tx - 2, 4, COL_DIM);
-    // We don't know total duration, so just show a pulsing dot
-    int dot_x = tx + (int)((millis() / 500) % (uint32_t)(W - tx - 2));
+    // Progress bar: pulsing dot bounces inside the bar.
+    // bar_w-4 keeps the 4-px dot fully within the bar (no off-screen overdraw).
+    int bar_w = W - tx - 2;
+    canvas.fillRect(tx, y, bar_w, 4, COL_DIM);
+    int dot_x = tx + (int)((millis() / 500) % (uint32_t)(bar_w - 3));
     canvas.fillRect(dot_x, y, 4, 4, COL_FG);
     y += 8;
 
@@ -174,7 +198,7 @@ void UIManager::drawNowPlaying(const AppState& state, const Library& lib) {
 void UIManager::drawLibrary(const AppState& state, const Library& lib) {
     int count = lib.count();
     int y = 14;
-    int visible_rows = (H - y) / 11;
+    int visible_rows = (H - HINT_H - 1 - y) / 11;  // leave room for hint bar
 
     // Auto-scroll to keep cursor on screen
     if (state.lib_cursor < s_lib_scroll)
@@ -219,12 +243,6 @@ void UIManager::drawLibrary(const AppState& state, const Library& lib) {
         canvas.fillRect(W - 3, bar_y, 3, bar_h, COL_DIM);
     }
 
-    // Current path hint in dim at top right of status bar is already handled
-    // by drawStatusBar. We additionally show it at the very bottom.
-    canvas.setTextColor(COL_DIM, COL_BG);
-    canvas.setTextDatum(textdatum_t::bottom_right);
-    canvas.drawString(lib.currentPath(), W - 4, H - 1);
-    canvas.setTextDatum(textdatum_t::top_left);
 }
 
 void UIManager::drawEQSettings(const AppState& state) {
@@ -298,6 +316,31 @@ void UIManager::drawRecorder(const AppState& state, uint32_t elapsed_ms, uint8_t
     canvas.drawString("STOP: Fn+REC", W/2, 110);
     canvas.setTextDatum(textdatum_t::top_left);
     canvas.pushSprite(0, 0);
+}
+
+void UIManager::drawScreenTimeout(const AppState& state) {
+    static const char* OPTS[SCREEN_TIMEOUT_COUNT] = {
+        "Never",
+        "Dim 15s / Off 30s",
+        "Dim 30s / Off 60s",
+        "Dim 60s / Off 2 min",
+    };
+
+    canvas.setTextColor(COL_FG, COL_BG);
+    canvas.setTextDatum(textdatum_t::top_center);
+    canvas.drawString("SCREEN TIMEOUT", W/2, 16);
+    canvas.setTextDatum(textdatum_t::top_left);
+
+    for (int i = 0; i < SCREEN_TIMEOUT_COUNT; i++) {
+        bool sel = (i == state.screen_timeout_idx);
+        if (sel) {
+            canvas.fillRect(4, 30 + i * 14, W - 8, 13, COL_SELECTED);
+            canvas.setTextColor(COL_FG, COL_SELECTED);
+        } else {
+            canvas.setTextColor(COL_FG, COL_BG);
+        }
+        canvas.drawString(OPTS[i], 8, 32 + i * 14);
+    }
 }
 
 void UIManager::drawSettings(const AppState& state) {

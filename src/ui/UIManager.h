@@ -14,6 +14,7 @@ public:
     static void drawLibrary(const AppState& state, const Library& lib);
     static void drawEQSettings(const AppState& state);
     static void drawSleepTimer(const AppState& state);
+    static void drawScreenTimeout(const AppState& state);
     static void drawRecorder(const AppState& state, uint32_t elapsed_ms, uint8_t level);
     static void drawSettings(const AppState& state);
 
@@ -26,11 +27,9 @@ public:
 private:
     static M5Canvas canvas;    // off-screen framebuffer
 
-    // Status bar (top row)
+    // Status bar (top row) and hint bar (bottom row)
     static void drawStatusBar(const AppState& state);
-
-    // List rendering helper
-    static void drawList(const char* const* items, int count, int cursor, int scroll);
+    static void drawHintBar(const char* text);
 
     static bool    s_art_loaded;
     static bool    s_canvas_ok;

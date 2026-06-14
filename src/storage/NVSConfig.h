@@ -12,4 +12,5 @@ public:
     static void saveFullSound(bool enabled);
     static void saveMono(bool enabled);
     static void saveSleepTimer(uint8_t idx);
+    static void saveScreenTimeout(uint8_t idx);
 };

@@ -58,7 +58,7 @@ static const struct {
     // ── Row 2, cols 0-3  (codes 21-24) ────────────────────────────────────
     { 21, KeyCode::NONE,  '4',  KeyCode::NONE   },
     { 22, KeyCode::NONE,  'r',  KeyCode::FN_R   },  // r / Repeat
-    { 23, KeyCode::NONE,  'd',  KeyCode::NONE   },
+    { 23, KeyCode::NONE,  'd',  KeyCode::FN_D   },  // d / screen Dim
     { 24, KeyCode::NONE,  'x',  KeyCode::NONE   },
     // ── Row 2, cols 4-7  (codes 25-28) ────────────────────────────────────
     { 25, KeyCode::NONE,  '5',  KeyCode::NONE   },

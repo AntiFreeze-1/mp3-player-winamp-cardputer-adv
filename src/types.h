@@ -42,7 +42,7 @@ enum class KeyCode : uint8_t {
     ENTER, ESC,
     PLUS, MINUS,
     FN_LEFT, FN_RIGHT,
-    FN_S, FN_R, FN_E, FN_F, FN_T, FN_M, FN_O, FN_REC,
+    FN_S, FN_R, FN_E, FN_F, FN_T, FN_M, FN_O, FN_REC, FN_D,
     OK_LONG,
     CHAR_A = 0x40,  // printable characters start here
 };
@@ -63,6 +63,7 @@ enum class Screen : uint8_t {
     VOICE_RECORDER,
     RECORDINGS,
     SETTINGS,
+    SCREEN_TIMEOUT,
 };
 
 // ── Application state (shared across tasks via mutex) ──────────────────────
@@ -86,4 +87,5 @@ struct AppState {
     char          current_track_path[128]; // full SD path of current track
     char          current_track_name[48];  // display name (filename, no ext)
     uint32_t      track_pos_ms;    // current playback position
+    uint8_t       screen_timeout_idx;  // index into SCREEN_TIMEOUT_SECS
 };
