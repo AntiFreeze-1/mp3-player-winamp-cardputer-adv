@@ -15,9 +15,10 @@ uint32_t UIManager::s_notif_until = 0;
 int      UIManager::s_lib_scroll      = 0;
 int      UIManager::s_settings_scroll = 0;
 
-static constexpr int W      = 240;
-static constexpr int H      = 135;
-static constexpr int HINT_H = 9;   // reserved at bottom for key hints
+static constexpr int W           = 240;
+static constexpr int H           = 135;
+static constexpr int HINT_H      = 9;    // single-line hint (all screens except now-playing)
+static constexpr int HINT_H_PLAY = 19;   // two-line hint on now-playing
 
 // ── Fixed colors (not themed) ─────────────────────────────────────────────
 static constexpr uint16_t COL_BG     = 0x0000;
@@ -154,11 +155,10 @@ void UIManager::draw(const AppState& state, const Library& lib,
     }
 
     // Hint bar at bottom of every interactive screen
+    // (NOW_PLAYING draws its own 2-line hint inside drawNowPlaying)
     switch (state.current_screen) {
-        case Screen::NOW_PLAYING:
-            drawHintBar(",=prev /=next  Entr=pause  =/- vol  ESC=list");   break;
         case Screen::LIBRARY:
-            drawHintBar(";=up .=dn  Entr=open  ESC=back  =/- vol");        break;
+            drawHintBar(";=up .=dn  Entr=open  ESC=back  +/-=vol");        break;
         case Screen::SETTINGS:
             drawHintBar(";=up .=dn  Entr=change  ESC=back  Fn+G=open");    break;
         default: break;
@@ -221,9 +221,10 @@ void UIManager::drawNowPlaying(const AppState& state, const Library& lib) {
     bool playing = (state.playback == PlaybackState::PLAYING);
     uint32_t ms  = millis();
 
-    // Left panel background
-    int panel_cy = 14 + (H - HINT_H - 1 - 14) / 2;  // vertical center of content area
-    canvas.fillRect(0, 14, 100, H - 14, COL_ACCENT);
+    // Left panel — stops above the 2-line hint bar
+    int content_bot = H - HINT_H_PLAY - 1;
+    int panel_cy    = 14 + (content_bot - 14) / 2;
+    canvas.fillRect(0, 14, 100, content_bot - 14, COL_ACCENT);
 
     // Animation
     switch (state.anim_type) {
@@ -289,6 +290,16 @@ void UIManager::drawNowPlaying(const AppState& state, const Library& lib) {
     }
     canvas.setTextColor(COL_DIM, COL_BG);
     canvas.drawString(EQ_PRESET_NAMES[(uint8_t)state.eq_preset], tx + 65, y);
+
+    // Two-line hint bar
+    int hy = H - HINT_H_PLAY;
+    canvas.fillRect(0, hy - 1, W, HINT_H_PLAY + 1, COL_BG);
+    canvas.drawFastHLine(0, hy - 1, W, COL_DIM);
+    canvas.setTextColor(COL_DIM, COL_BG);
+    canvas.setTextDatum(textdatum_t::top_left);
+    canvas.drawString(",<prev  />next  Entr=play  +/-=vol  ESC=lib", 2, hy);
+    canvas.drawString("Fn+S=shuf  Fn+R=rpt  Fn+M=mute  Fn+G=settings", 2, hy + 10);
+    canvas.setTextColor(COL_FG, COL_BG);
 }
 
 void UIManager::drawLibrary(const AppState& state, const Library& lib) {
