@@ -497,11 +497,15 @@ static void uiTask(void* arg) {
         KeyEvent ev;
         static uint8_t s_brightness = SCREEN_BRIGHTNESS_NORMAL;
         while (xQueueReceive(g_key_queue, &ev, 0) == pdTRUE) {
-            g_last_activity_ms = millis();
-            // Wake display on any key press
-            if (s_brightness != SCREEN_BRIGHTNESS_NORMAL) {
-                M5.Display.setBrightness(SCREEN_BRIGHTNESS_NORMAL);
-                s_brightness = SCREEN_BRIGHTNESS_NORMAL;
+            // Only key-down events count as user activity. Key-up events (and
+            // any spurious releases the TCA8418 may produce while I2S is
+            // active) must not reset the screen dim/off timer.
+            if (ev.pressed) {
+                g_last_activity_ms = millis();
+                if (s_brightness != SCREEN_BRIGHTNESS_NORMAL) {
+                    M5.Display.setBrightness(SCREEN_BRIGHTNESS_NORMAL);
+                    s_brightness = SCREEN_BRIGHTNESS_NORMAL;
+                }
             }
             if (xSemaphoreTake(g_state_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
                 handleKey(ev, g_state);
