@@ -44,7 +44,10 @@ void AudioEngine::begin() {
     // after setPinout() so BCLK (the codec's clock source) is already assigned.
     ES8311::begin();
 
-    pinMode(PIN_HP_DETECT, INPUT_PULLUP);
+    // NOTE: GPIO 38 is the display backlight PWM pin (LEDC ch7, set up by
+    // M5GFX during M5.begin). Do NOT call pinMode(38, ...) here — that would
+    // reconfigure the GPIO mux away from LEDC and break setBrightness().
+    // Headphone-detect is therefore not available on this board variant.
 
     DSP::init(48000.0f);
 }
@@ -52,8 +55,17 @@ void AudioEngine::begin() {
 void AudioEngine::loop() {
     if (!s_audio) return;
     s_audio->loop();
-    if (s_state == PlaybackState::PLAYING)
-        s_position_ms = s_audio->getAudioCurrentTime() * 1000UL;
+    if (s_state == PlaybackState::PLAYING) {
+        if (!s_audio->isRunning()) {
+            // Library stopped internally (codec error, early stopSong, or normal
+            // EOF on a path that doesn't call audio_eof_mp3). Treat as EOF so
+            // the audioTask handler can update state cleanly.
+            s_eof   = true;
+            s_state = PlaybackState::STOPPED;
+        } else {
+            s_position_ms = s_audio->getAudioCurrentTime() * 1000UL;
+        }
+    }
 }
 
 uint32_t AudioEngine::durationMs() {
@@ -129,7 +141,7 @@ void AudioEngine::setFullSound(bool enabled) { DSP::setFullSound(enabled); }
 void AudioEngine::setMono(bool enabled)      { DSP::setMono(enabled); }
 
 bool AudioEngine::headphonesIn() {
-    return digitalRead(PIN_HP_DETECT) == LOW;
+    return false;  // GPIO 38 is the backlight PWM pin; HP-detect unavailable
 }
 
 void AudioEngine::restorePins() {

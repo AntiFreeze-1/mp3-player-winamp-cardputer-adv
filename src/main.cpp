@@ -494,8 +494,23 @@ static void uiTask(void* arg) {
             char m[28]; snprintf(m, sizeof(m), "loop %lu", (unsigned long)beat);
             markSlot(SLOT_UI, m);
         }
+        M5.update();  // refresh BtnA (G0) state
+
         KeyEvent ev;
         static uint8_t s_brightness = SCREEN_BRIGHTNESS_NORMAL;
+
+        // G0 (BOOT button / BtnA): manual display on/off toggle.
+        if (M5.BtnA.wasPressed()) {
+            if (s_brightness == 0) {
+                M5.Display.setBrightness(SCREEN_BRIGHTNESS_NORMAL);
+                s_brightness       = SCREEN_BRIGHTNESS_NORMAL;
+                g_last_activity_ms = millis();
+            } else {
+                M5.Display.setBrightness(0);
+                s_brightness = 0;
+            }
+        }
+
         while (xQueueReceive(g_key_queue, &ev, 0) == pdTRUE) {
             // Only key-down events count as user activity. Key-up events (and
             // any spurious releases the TCA8418 may produce while I2S is
