@@ -40,7 +40,8 @@ void Library::loadEntries() {
     File f = dir.openNextFile();
     while (f && m_count < MAX_ENTRIES) {
         bool is_dir = f.isDirectory();
-        if (is_dir || isAudioExt(f.name())) {
+        if ((is_dir || isAudioExt(f.name())) &&
+            strlen(f.name()) < sizeof(Entry::name)) {
             strncpy(m_entries[m_count].name, f.name(), sizeof(Entry::name) - 1);
             m_entries[m_count].name[sizeof(Entry::name) - 1] = '\0';
             m_entries[m_count].is_dir = is_dir;
