@@ -257,18 +257,41 @@ void UIManager::drawNowPlaying(const AppState& state, const Library& lib) {
     }
     canvas.drawString(dir, tx, y); y += 11;
 
-    // Progress bar — pulsing dot stays inside the bar (bar_w-3 keeps 4px dot within bounds)
+    // Progress bar + timestamps
     int bar_w = W - tx - 2;
-    canvas.fillRect(tx, y, bar_w, 4, COL_DIM);
-    int dot_x = tx + (int)((ms / 500) % (uint32_t)(bar_w - 3));
-    canvas.fillRect(dot_x, y, 4, 4, COL_FG);
-    y += 8;
+    uint32_t dur  = state.track_duration_ms;
+    uint32_t pos  = state.track_pos_ms;
 
-    // Elapsed time
-    uint32_t pos_s = state.track_pos_ms / 1000;
-    char time_str[12];
-    snprintf(time_str, sizeof(time_str), "%lu:%02lu",
-             (unsigned long)(pos_s / 60), (unsigned long)(pos_s % 60));
+    canvas.fillRect(tx, y, bar_w, 4, COL_DIM);
+    if (dur > 0) {
+        // Filled bar proportional to position
+        int filled = (int)((int64_t)pos * bar_w / dur);
+        if (filled > bar_w) filled = bar_w;
+        if (filled > 0) canvas.fillRect(tx, y, filled, 4, COL_FG);
+        // Playhead dot
+        int dot_x = tx + filled - 2;
+        if (dot_x < tx) dot_x = tx;
+        if (dot_x + 4 > tx + bar_w) dot_x = tx + bar_w - 4;
+        canvas.fillRect(dot_x, y - 1, 4, 6, COL_ACCENT);
+    } else {
+        // Unknown duration: pulsing dot
+        int dot_x = tx + (int)((ms / 500) % (uint32_t)(bar_w - 3));
+        canvas.fillRect(dot_x, y, 4, 4, COL_FG);
+    }
+    y += 7;
+
+    // Time: elapsed / total (or just elapsed if duration unknown)
+    uint32_t pos_s = pos / 1000;
+    char time_str[24];
+    if (dur > 0) {
+        uint32_t dur_s = dur / 1000;
+        snprintf(time_str, sizeof(time_str), "%lu:%02lu / %lu:%02lu",
+                 (unsigned long)(pos_s / 60), (unsigned long)(pos_s % 60),
+                 (unsigned long)(dur_s / 60), (unsigned long)(dur_s % 60));
+    } else {
+        snprintf(time_str, sizeof(time_str), "%lu:%02lu",
+                 (unsigned long)(pos_s / 60), (unsigned long)(pos_s % 60));
+    }
     canvas.setTextColor(COL_DIM, COL_BG);
     canvas.drawString(time_str, tx, y); y += 11;
 
@@ -297,8 +320,8 @@ void UIManager::drawNowPlaying(const AppState& state, const Library& lib) {
     canvas.drawFastHLine(0, hy - 1, W, COL_DIM);
     canvas.setTextColor(COL_DIM, COL_BG);
     canvas.setTextDatum(textdatum_t::top_left);
-    canvas.drawString(",<prev  />next  Entr=play  +/-=vol  ESC=lib", 2, hy);
-    canvas.drawString("Fn+S=shuf  Fn+R=rpt  Fn+M=mute  Fn+G=settings", 2, hy + 10);
+    canvas.drawString("+/-=volume  ESC=library  Fn+G=settings", 2, hy);
+    canvas.drawString(",=prev  /=next  Entr=play  Fn+S=shuf  Fn+R=rpt", 2, hy + 10);
     canvas.setTextColor(COL_FG, COL_BG);
 }
 

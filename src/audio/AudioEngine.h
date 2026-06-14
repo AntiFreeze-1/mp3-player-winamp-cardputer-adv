@@ -31,10 +31,11 @@ public:
     static void     setMono(bool enabled);
 
     // State queries
-    static PlaybackState state()     { return s_state; }
-    static uint32_t      positionMs(){ return s_position_ms; }
-    static bool          isEOF()     { return s_eof; }
-    static void          clearEOF()  { s_eof = false; }
+    static PlaybackState state()      { return s_state; }
+    static uint32_t      positionMs() { return s_position_ms; }
+    static uint32_t      durationMs();
+    static bool          isEOF()      { return s_eof; }
+    static void          clearEOF()   { s_eof = false; }
 
     // Headphone detection
     static bool headphonesIn();

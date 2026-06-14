@@ -86,7 +86,8 @@ struct AppState {
     int           lib_cursor;      // cursor position in browser list
     char          current_track_path[128]; // full SD path of current track
     char          current_track_name[48];  // display name (filename, no ext)
-    uint32_t      track_pos_ms;    // current playback position
+    uint32_t      track_pos_ms;      // current playback position
+    uint32_t      track_duration_ms; // total track length (0 = unknown)
     uint8_t       screen_timeout_idx;  // index into SCREEN_TIMEOUT_SECS
     uint8_t       anim_type;           // 0=Vinyl 1=CD 2=Cassette
     uint8_t       theme_idx;           // 0=Gray 1=Red 2=Yellow

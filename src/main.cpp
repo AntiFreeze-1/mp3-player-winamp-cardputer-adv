@@ -516,8 +516,10 @@ static void uiTask(void* arg) {
             PlaybackState est = AudioEngine::state();
             g_state.playback  = est;
             // Preserve a boot-restored resume position until playback begins.
-            if (est != PlaybackState::STOPPED)
-                g_state.track_pos_ms = AudioEngine::positionMs();
+            if (est != PlaybackState::STOPPED) {
+                g_state.track_pos_ms      = AudioEngine::positionMs();
+                g_state.track_duration_ms = AudioEngine::durationMs();
+            }
             g_state.battery_pct  = BatteryMonitor::percent();
             g_state.charging     = BatteryMonitor::isCharging();
             snap = g_state;

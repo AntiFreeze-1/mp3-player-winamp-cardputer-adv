@@ -56,6 +56,11 @@ void AudioEngine::loop() {
         s_position_ms = s_audio->getAudioCurrentTime() * 1000UL;
 }
 
+uint32_t AudioEngine::durationMs() {
+    if (!s_audio) return 0;
+    return s_audio->getAudioFileDuration() * 1000UL;
+}
+
 bool AudioEngine::play(const char* path) {
     if (!s_audio) return false;
     strncpy(s_current_path, path, sizeof(s_current_path) - 1);
