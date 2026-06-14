@@ -38,4 +38,5 @@ private:
 
     // Scroll animation
     static int s_lib_scroll;
+    static int s_settings_scroll;
 };

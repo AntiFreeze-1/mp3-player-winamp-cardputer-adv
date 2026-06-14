@@ -120,10 +120,6 @@ static void handleKey(const KeyEvent& ev, AppState& state) {
         case KeyCode::UP:
             if (state.current_screen == Screen::LIBRARY) {
                 if (state.lib_cursor > 0) state.lib_cursor--;
-            } else if (state.current_screen == Screen::SLEEP_TIMER) {
-                if (state.sleep_timer_idx > 0) state.sleep_timer_idx--;
-            } else if (state.current_screen == Screen::SCREEN_TIMEOUT) {
-                if (state.screen_timeout_idx > 0) state.screen_timeout_idx--;
             } else if (state.current_screen == Screen::SETTINGS) {
                 if (state.settings_cursor > 0) state.settings_cursor--;
             }
@@ -132,14 +128,8 @@ static void handleKey(const KeyEvent& ev, AppState& state) {
         case KeyCode::DOWN:
             if (state.current_screen == Screen::LIBRARY) {
                 if (state.lib_cursor < g_lib.count() - 1) state.lib_cursor++;
-            } else if (state.current_screen == Screen::SLEEP_TIMER) {
-                if (state.sleep_timer_idx < SLEEP_TIMER_COUNT - 1)
-                    state.sleep_timer_idx++;
-            } else if (state.current_screen == Screen::SCREEN_TIMEOUT) {
-                if (state.screen_timeout_idx < SCREEN_TIMEOUT_COUNT - 1)
-                    state.screen_timeout_idx++;
             } else if (state.current_screen == Screen::SETTINGS) {
-                if (state.settings_cursor < 1) state.settings_cursor++;
+                if (state.settings_cursor < 8) state.settings_cursor++;
             }
             break;
 
@@ -176,31 +166,77 @@ static void handleKey(const KeyEvent& ev, AppState& state) {
                         state.track_pos_ms = resume_ms;
                     }
                 }
-            } else if (state.current_screen == Screen::SLEEP_TIMER) {
-                uint16_t mins = SLEEP_TIMER_OPTIONS[state.sleep_timer_idx];
-                state.sleep_deadline = mins > 0 ? millis() + (uint32_t)mins * 60000UL : 0;
-                NVSConfig::saveSleepTimer(state.sleep_timer_idx);
-                state.current_screen = Screen::NOW_PLAYING;
-                UIManager::showNotif(mins > 0 ? "Timer set" : "Timer off");
-            } else if (state.current_screen == Screen::SCREEN_TIMEOUT) {
-                NVSConfig::saveScreenTimeout(state.screen_timeout_idx);
-                state.current_screen = Screen::NOW_PLAYING;
-                static const char* TIMEOUT_LABELS[SCREEN_TIMEOUT_COUNT] = {
-                    "Screen: never dim", "Screen: 15s/30s",
-                    "Screen: 30s/60s",  "Screen: 60s/2min"
-                };
-                UIManager::showNotif(TIMEOUT_LABELS[state.screen_timeout_idx]);
             } else if (state.current_screen == Screen::SETTINGS) {
-                if (state.settings_cursor == 0) {
-                    state.anim_type = (state.anim_type + 1) % 3;
-                    NVSConfig::saveAnimType(state.anim_type);
-                    static const char* ANIM_NAMES[] = { "Anim: Vinyl", "Anim: CD", "Anim: Cassette" };
-                    UIManager::showNotif(ANIM_NAMES[state.anim_type]);
-                } else {
-                    state.theme_idx = (state.theme_idx + 1) % 3;
-                    NVSConfig::saveTheme(state.theme_idx);
-                    static const char* THEME_NAMES[] = { "Theme: Gray", "Theme: Red", "Theme: Yellow" };
-                    UIManager::showNotif(THEME_NAMES[state.theme_idx]);
+                switch (state.settings_cursor) {
+                    case 0: {  // Animation
+                        state.anim_type = (state.anim_type + 1) % 3;
+                        NVSConfig::saveAnimType(state.anim_type);
+                        static const char* N[] = { "Vinyl", "CD", "Cassette" };
+                        UIManager::showNotif(N[state.anim_type]);
+                        break;
+                    }
+                    case 1: {  // Theme
+                        state.theme_idx = (state.theme_idx + 1) % 3;
+                        NVSConfig::saveTheme(state.theme_idx);
+                        static const char* N[] = { "Gray", "Red", "Yellow" };
+                        UIManager::showNotif(N[state.theme_idx]);
+                        break;
+                    }
+                    case 2: {  // EQ preset
+                        uint8_t next = ((uint8_t)state.eq_preset + 1) % (uint8_t)EQPreset::EQ_COUNT;
+                        state.eq_preset = (EQPreset)next;
+                        AudioEngine::setEQPreset(state.eq_preset, state.eq_custom);
+                        NVSConfig::saveEQPreset(state.eq_preset, state.eq_custom);
+                        UIManager::showNotif(EQ_PRESET_NAMES[next]);
+                        break;
+                    }
+                    case 3: {  // FullSound
+                        state.fullsound = !state.fullsound;
+                        AudioEngine::setFullSound(state.fullsound);
+                        NVSConfig::saveFullSound(state.fullsound);
+                        UIManager::showNotif(state.fullsound ? "FullSound On" : "FullSound Off");
+                        break;
+                    }
+                    case 4: {  // Mono
+                        state.mono = !state.mono;
+                        AudioEngine::setMono(state.mono);
+                        NVSConfig::saveMono(state.mono);
+                        UIManager::showNotif(state.mono ? "Mono" : "Stereo");
+                        break;
+                    }
+                    case 5: {  // Shuffle
+                        state.shuffle = !state.shuffle;
+                        NVSConfig::savePlaybackMode(state.shuffle, state.repeat);
+                        UIManager::showNotif(state.shuffle ? "Shuffle On" : "Shuffle Off");
+                        break;
+                    }
+                    case 6: {  // Repeat
+                        state.repeat = (RepeatMode)(((uint8_t)state.repeat + 1) % 3);
+                        NVSConfig::savePlaybackMode(state.shuffle, state.repeat);
+                        static const char* N[] = { "Repeat Off", "Repeat One", "Repeat All" };
+                        UIManager::showNotif(N[(uint8_t)state.repeat]);
+                        break;
+                    }
+                    case 7: {  // Sleep Timer
+                        state.sleep_timer_idx = (state.sleep_timer_idx + 1) % SLEEP_TIMER_COUNT;
+                        uint16_t mins = SLEEP_TIMER_OPTIONS[state.sleep_timer_idx];
+                        state.sleep_deadline = mins > 0
+                            ? millis() + (uint32_t)mins * 60000UL : 0;
+                        NVSConfig::saveSleepTimer(state.sleep_timer_idx);
+                        UIManager::showNotif(mins > 0 ? "Timer set" : "Timer off");
+                        break;
+                    }
+                    case 8: {  // Screen Timeout
+                        state.screen_timeout_idx =
+                            (state.screen_timeout_idx + 1) % SCREEN_TIMEOUT_COUNT;
+                        NVSConfig::saveScreenTimeout(state.screen_timeout_idx);
+                        static const char* N[] = {
+                            "Dim: never", "Dim: 15s/30s", "Dim: 30s/1m", "Dim: 1m/2m"
+                        };
+                        UIManager::showNotif(N[state.screen_timeout_idx]);
+                        break;
+                    }
+                    default: break;
                 }
             }
             break;
@@ -311,14 +347,16 @@ static void handleKey(const KeyEvent& ev, AppState& state) {
             UIManager::showNotif(state.mono ? "Mono" : "Stereo");
             break;
 
-        // ── Sleep timer ───────────────────────────────────────────────────
+        // ── Sleep timer: jump to Settings at Sleep Timer row ─────────────
         case KeyCode::FN_T:
-            state.current_screen = Screen::SLEEP_TIMER;
+            state.settings_cursor = 7;
+            state.current_screen  = Screen::SETTINGS;
             break;
 
-        // ── Screen dim/off timer ──────────────────────────────────────────
+        // ── Screen dim: jump to Settings at Screen Dim row ────────────────
         case KeyCode::FN_D:
-            state.current_screen = Screen::SCREEN_TIMEOUT;
+            state.settings_cursor = 8;
+            state.current_screen  = Screen::SETTINGS;
             break;
 
         // ── Settings screen ───────────────────────────────────────────────

@@ -12,7 +12,8 @@ bool     UIManager::s_art_loaded  = false;
 bool     UIManager::s_canvas_ok   = false;
 char     UIManager::s_notif[64]   = {0};
 uint32_t UIManager::s_notif_until = 0;
-int      UIManager::s_lib_scroll  = 0;
+int      UIManager::s_lib_scroll      = 0;
+int      UIManager::s_settings_scroll = 0;
 
 static constexpr int W      = 240;
 static constexpr int H      = 135;
@@ -147,8 +148,6 @@ void UIManager::draw(const AppState& state, const Library& lib,
         case Screen::NOW_PLAYING:    drawNowPlaying(state, lib);   break;
         case Screen::LIBRARY:        drawLibrary(state, lib);      break;
         case Screen::EQ_SETTINGS:    drawEQSettings(state);        break;
-        case Screen::SLEEP_TIMER:    drawSleepTimer(state);        break;
-        case Screen::SCREEN_TIMEOUT: drawScreenTimeout(state);     break;
         case Screen::SETTINGS:       drawSettings(state);          break;
         case Screen::VOICE_RECORDER: break;
         default: break;
@@ -160,11 +159,8 @@ void UIManager::draw(const AppState& state, const Library& lib,
             drawHintBar(",=prev /=next  Entr=pause  =/- vol  ESC=list");   break;
         case Screen::LIBRARY:
             drawHintBar(";=up .=dn  Entr=open  ESC=back  =/- vol");        break;
-        case Screen::SLEEP_TIMER:
-        case Screen::SCREEN_TIMEOUT:
-            drawHintBar(";=up .=dn  Entr=set  ESC=cancel");                break;
         case Screen::SETTINGS:
-            drawHintBar(";=up .=dn  Entr=change  ESC=back");               break;
+            drawHintBar(";=up .=dn  Entr=change  ESC=back  Fn+G=open");    break;
         default: break;
     }
 
@@ -442,45 +438,102 @@ void UIManager::drawRecorder(const AppState& state, uint32_t elapsed_ms, uint8_t
 }
 
 void UIManager::drawSettings(const AppState& state) {
-    static const char* ANIM_NAMES[]  = { "Vinyl", "CD", "Cassette" };
-    static const char* THEME_NAMES[] = { "Gray",  "Red", "Yellow"  };
+    static const char* ANIM_NAMES[]  = { "Vinyl",  "CD",  "Cassette" };
+    static const char* THEME_NAMES[] = { "Gray",   "Red", "Yellow"   };
+    static const char* REPEAT_NAMES[]= { "Off",    "One", "All"      };
 
+    // Build all 9 rows as label + value strings
+    struct Row { char label[14]; char value[14]; };
+    Row rows[9];
+
+    snprintf(rows[0].label, sizeof(rows[0].label), "Animation");
+    snprintf(rows[0].value, sizeof(rows[0].value), "%s",
+             ANIM_NAMES[state.anim_type < 3 ? state.anim_type : 0]);
+
+    snprintf(rows[1].label, sizeof(rows[1].label), "Theme");
+    snprintf(rows[1].value, sizeof(rows[1].value), "%s",
+             THEME_NAMES[state.theme_idx < 3 ? state.theme_idx : 0]);
+
+    snprintf(rows[2].label, sizeof(rows[2].label), "EQ");
+    snprintf(rows[2].value, sizeof(rows[2].value), "%s",
+             EQ_PRESET_NAMES[(uint8_t)state.eq_preset < (uint8_t)EQPreset::EQ_COUNT
+                              ? (uint8_t)state.eq_preset : 0]);
+
+    snprintf(rows[3].label, sizeof(rows[3].label), "FullSound");
+    snprintf(rows[3].value, sizeof(rows[3].value), state.fullsound ? "On" : "Off");
+
+    snprintf(rows[4].label, sizeof(rows[4].label), "Mono");
+    snprintf(rows[4].value, sizeof(rows[4].value), state.mono ? "On" : "Off");
+
+    snprintf(rows[5].label, sizeof(rows[5].label), "Shuffle");
+    snprintf(rows[5].value, sizeof(rows[5].value), state.shuffle ? "On" : "Off");
+
+    snprintf(rows[6].label, sizeof(rows[6].label), "Repeat");
+    snprintf(rows[6].value, sizeof(rows[6].value), "%s",
+             REPEAT_NAMES[(uint8_t)state.repeat < 3 ? (uint8_t)state.repeat : 0]);
+
+    snprintf(rows[7].label, sizeof(rows[7].label), "Sleep Timer");
+    if (state.sleep_timer_idx == 0 ||
+        state.sleep_timer_idx >= SLEEP_TIMER_COUNT)
+        snprintf(rows[7].value, sizeof(rows[7].value), "Off");
+    else
+        snprintf(rows[7].value, sizeof(rows[7].value), "%d min",
+                 SLEEP_TIMER_OPTIONS[state.sleep_timer_idx]);
+
+    snprintf(rows[8].label, sizeof(rows[8].label), "Screen Dim");
+    {
+        static const char* DIM_OPTS[] = { "Never", "15s/30s", "30s/1m", "1m/2m" };
+        snprintf(rows[8].value, sizeof(rows[8].value), "%s",
+                 DIM_OPTS[state.screen_timeout_idx < SCREEN_TIMEOUT_COUNT
+                           ? state.screen_timeout_idx : 0]);
+    }
+
+    static constexpr int N_ITEMS    = 9;
+    static constexpr int ROW_H      = 12;
+    static constexpr int CONTENT_Y  = 28;
+    int content_h  = H - HINT_H - 1 - CONTENT_Y;
+    int visible    = content_h / ROW_H;
+
+    // Auto-scroll to keep selected row visible
+    if (state.settings_cursor < s_settings_scroll)
+        s_settings_scroll = state.settings_cursor;
+    if (state.settings_cursor >= s_settings_scroll + visible)
+        s_settings_scroll = state.settings_cursor - visible + 1;
+
+    // Title
     canvas.setTextColor(COL_FG, COL_BG);
     canvas.setTextDatum(textdatum_t::top_center);
     canvas.drawString("SETTINGS", W/2, 16);
     canvas.setTextDatum(textdatum_t::top_left);
 
-    struct { const char* label; const char* value; } items[] = {
-        { "Animation", ANIM_NAMES [state.anim_type  < 3 ? state.anim_type  : 0] },
-        { "Theme",     THEME_NAMES[state.theme_idx  < 3 ? state.theme_idx  : 0] },
-    };
-    static constexpr int N_ITEMS = (int)(sizeof(items) / sizeof(items[0]));
+    // Rows
+    int y = CONTENT_Y;
+    for (int i = 0; i < visible && (s_settings_scroll + i) < N_ITEMS; i++) {
+        int  idx = s_settings_scroll + i;
+        bool sel = (idx == state.settings_cursor);
 
-    int y = 32;
-    for (int i = 0; i < N_ITEMS; i++) {
-        bool sel = (i == state.settings_cursor);
         if (sel) {
-            canvas.fillRect(4, y - 1, W - 8, 13, COL_SELECTED);
+            canvas.fillRect(2, y - 1, W - 4, ROW_H, COL_SELECTED);
             canvas.setTextColor(COL_FG, COL_SELECTED);
         } else {
             canvas.setTextColor(COL_FG, COL_BG);
         }
-        char line[40];
-        snprintf(line, sizeof(line), "%-12s %s", items[i].label, items[i].value);
-        canvas.drawString(line, 8, y + 1);
-        y += 16;
+
+        canvas.drawString(rows[idx].label, 6, y + 1);
+        canvas.setTextDatum(textdatum_t::top_right);
+        canvas.drawString(rows[idx].value, W - 6, y + 1);
+        canvas.setTextDatum(textdatum_t::top_left);
+        y += ROW_H;
     }
 
-    // Read-only info below
-    canvas.setTextColor(COL_DIM, COL_BG);
-    y += 4;
-    char info[40];
-    snprintf(info, sizeof(info), "Vol %-3d  %s", state.volume,
-             EQ_PRESET_NAMES[(uint8_t)state.eq_preset]);
-    canvas.drawString(info, 8, y); y += 13;
-    snprintf(info, sizeof(info), "Battery %d%%  %s",
-             state.battery_pct, state.charging ? "CHG" : "");
-    canvas.drawString(info, 8, y);
+    // Scroll indicator
+    if (N_ITEMS > visible) {
+        int bar_h = content_h * visible / N_ITEMS;
+        int bar_y = CONTENT_Y + (content_h - bar_h) * s_settings_scroll / (N_ITEMS - visible);
+        canvas.fillRect(W - 3, bar_y, 3, bar_h, COL_DIM);
+    }
+
+    canvas.setTextColor(COL_FG, COL_BG);
 }
 
 void UIManager::loadAlbumArt(const char* track_path, bool has_embedded) {
