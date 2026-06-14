@@ -512,15 +512,16 @@ static void uiTask(void* arg) {
         }
 
         while (xQueueReceive(g_key_queue, &ev, 0) == pdTRUE) {
-            // Only key-down events count as user activity. Key-up events (and
-            // any spurious releases the TCA8418 may produce while I2S is
-            // active) must not reset the screen dim/off timer.
+            // Any key event wakes the screen — LEDC duty may silently reset
+            // to 0 after sleep and needs explicit re-assertion.
+            if (s_brightness != SCREEN_BRIGHTNESS_NORMAL) {
+                M5.Display.setBrightness(SCREEN_BRIGHTNESS_NORMAL);
+                s_brightness = SCREEN_BRIGHTNESS_NORMAL;
+            }
+            // Only key-down events reset the inactivity timer. Key-up events
+            // and spurious TCA8418 releases (I2S EMI) must not extend the timer.
             if (ev.pressed) {
                 g_last_activity_ms = millis();
-                if (s_brightness != SCREEN_BRIGHTNESS_NORMAL) {
-                    M5.Display.setBrightness(SCREEN_BRIGHTNESS_NORMAL);
-                    s_brightness = SCREEN_BRIGHTNESS_NORMAL;
-                }
             }
             if (xSemaphoreTake(g_state_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
                 handleKey(ev, g_state);
@@ -564,10 +565,9 @@ static void uiTask(void* arg) {
                 if (off_ms > 0 && idle >= off_ms)    want = 0;
                 else if (dim_ms > 0 && idle >= dim_ms) want = SCREEN_BRIGHTNESS_DIM;
             }
-            if (want != s_brightness) {
-                M5.Display.setBrightness(want);
-                s_brightness = want;
-            }
+            // Always re-apply to prevent LEDC duty from silently staying at 0.
+            M5.Display.setBrightness(want);
+            s_brightness = want;
         }
 
         vTaskDelay(pdMS_TO_TICKS(33));
