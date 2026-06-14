@@ -497,7 +497,7 @@ static void uiTask(void* arg) {
         M5.update();  // refresh BtnA (G0) state
 
         KeyEvent ev;
-        static uint8_t s_brightness = SCREEN_BRIGHTNESS_NORMAL;
+        static uint8_t s_brightness = 0;  // force setBrightness on first frame
 
         // G0 (BOOT button / BtnA): manual display on/off toggle.
         if (M5.BtnA.wasPressed()) {
@@ -706,6 +706,7 @@ void setup() {
 
     bootStage("display init");
     UIManager::begin();
+    M5.Display.setBrightness(SCREEN_BRIGHTNESS_NORMAL);
 
     // Apply persisted audio settings now that the engine exists
     AudioEngine::setVolume(g_state.volume);
