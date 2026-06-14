@@ -15,7 +15,9 @@ void NVSConfig::load(AppState& state, char* last_track_out, uint32_t* last_pos_m
     state.shuffle      = prefs.getBool("shuffle", false);
     state.repeat       = (RepeatMode)prefs.getUChar("repeat_mode", 0);
     state.sleep_timer_idx     = prefs.getUChar("sleep_timer",     0);
-    state.screen_timeout_idx  = prefs.getUChar("screen_timeout",  1);  // default: Dim 15s/Off 30s
+    state.screen_timeout_idx  = prefs.getUChar("screen_timeout",  1);
+    state.anim_type           = prefs.getUChar("anim_type",        0);  // default: Vinyl
+    state.theme_idx           = prefs.getUChar("theme_idx",        0);  // default: Gray
 
     // Clamp volume in case stored value is out of range
     if (state.volume > VOLUME_MAX) state.volume = VOLUME_DEFAULT;
@@ -48,6 +50,8 @@ void NVSConfig::save(const AppState& state, const char* last_track, uint32_t las
     prefs.putUChar("repeat_mode",  (uint8_t)state.repeat);
     prefs.putUChar("sleep_timer",     state.sleep_timer_idx);
     prefs.putUChar("screen_timeout",  state.screen_timeout_idx);
+    prefs.putUChar("anim_type",       state.anim_type);
+    prefs.putUChar("theme_idx",       state.theme_idx);
     for (int i = 0; i < 5; i++) {
         char key[16];
         snprintf(key, sizeof(key), "eq_custom_%d", i);
@@ -110,5 +114,17 @@ void NVSConfig::saveSleepTimer(uint8_t idx) {
 void NVSConfig::saveScreenTimeout(uint8_t idx) {
     prefs.begin(NVS_NAMESPACE, false);
     prefs.putUChar("screen_timeout", idx);
+    prefs.end();
+}
+
+void NVSConfig::saveAnimType(uint8_t anim) {
+    prefs.begin(NVS_NAMESPACE, false);
+    prefs.putUChar("anim_type", anim);
+    prefs.end();
+}
+
+void NVSConfig::saveTheme(uint8_t theme) {
+    prefs.begin(NVS_NAMESPACE, false);
+    prefs.putUChar("theme_idx", theme);
     prefs.end();
 }

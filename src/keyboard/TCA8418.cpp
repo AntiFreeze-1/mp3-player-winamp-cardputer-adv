@@ -68,7 +68,7 @@ static const struct {
     // ── Row 3, cols 0-3  (codes 31-34) ────────────────────────────────────
     { 31, KeyCode::NONE,  '6',  KeyCode::NONE   },
     { 32, KeyCode::NONE,  'y',  KeyCode::NONE   },
-    { 33, KeyCode::NONE,  'g',  KeyCode::NONE   },
+    { 33, KeyCode::NONE,  'g',  KeyCode::FN_G   },  // g / settings
     { 34, KeyCode::NONE,  'v',  KeyCode::FN_REC },  // v / Voice recorder
     // ── Row 3, cols 4-7  (codes 35-38) ────────────────────────────────────
     { 35, KeyCode::NONE,  '7',  KeyCode::NONE   },

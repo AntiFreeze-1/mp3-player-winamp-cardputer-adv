@@ -124,6 +124,8 @@ static void handleKey(const KeyEvent& ev, AppState& state) {
                 if (state.sleep_timer_idx > 0) state.sleep_timer_idx--;
             } else if (state.current_screen == Screen::SCREEN_TIMEOUT) {
                 if (state.screen_timeout_idx > 0) state.screen_timeout_idx--;
+            } else if (state.current_screen == Screen::SETTINGS) {
+                if (state.settings_cursor > 0) state.settings_cursor--;
             }
             break;
 
@@ -136,6 +138,8 @@ static void handleKey(const KeyEvent& ev, AppState& state) {
             } else if (state.current_screen == Screen::SCREEN_TIMEOUT) {
                 if (state.screen_timeout_idx < SCREEN_TIMEOUT_COUNT - 1)
                     state.screen_timeout_idx++;
+            } else if (state.current_screen == Screen::SETTINGS) {
+                if (state.settings_cursor < 1) state.settings_cursor++;
             }
             break;
 
@@ -186,18 +190,29 @@ static void handleKey(const KeyEvent& ev, AppState& state) {
                     "Screen: 30s/60s",  "Screen: 60s/2min"
                 };
                 UIManager::showNotif(TIMEOUT_LABELS[state.screen_timeout_idx]);
+            } else if (state.current_screen == Screen::SETTINGS) {
+                if (state.settings_cursor == 0) {
+                    state.anim_type = (state.anim_type + 1) % 3;
+                    NVSConfig::saveAnimType(state.anim_type);
+                    static const char* ANIM_NAMES[] = { "Anim: Vinyl", "Anim: CD", "Anim: Cassette" };
+                    UIManager::showNotif(ANIM_NAMES[state.anim_type]);
+                } else {
+                    state.theme_idx = (state.theme_idx + 1) % 3;
+                    NVSConfig::saveTheme(state.theme_idx);
+                    static const char* THEME_NAMES[] = { "Theme: Gray", "Theme: Red", "Theme: Yellow" };
+                    UIManager::showNotif(THEME_NAMES[state.theme_idx]);
+                }
             }
             break;
 
         case KeyCode::ESC:
             if (state.current_screen == Screen::LIBRARY) {
-                // Go up one directory level
                 g_lib.goUp();
                 state.lib_cursor = 0;
+            } else if (state.current_screen == Screen::NOW_PLAYING) {
+                state.current_screen = Screen::LIBRARY;
             } else {
-                state.current_screen =
-                    (state.current_screen == Screen::NOW_PLAYING)
-                    ? Screen::LIBRARY : Screen::NOW_PLAYING;
+                state.current_screen = Screen::NOW_PLAYING;
             }
             break;
 
@@ -306,6 +321,12 @@ static void handleKey(const KeyEvent& ev, AppState& state) {
             state.current_screen = Screen::SCREEN_TIMEOUT;
             break;
 
+        // ── Settings screen ───────────────────────────────────────────────
+        case KeyCode::FN_G:
+            state.settings_cursor = 0;
+            state.current_screen  = Screen::SETTINGS;
+            break;
+
         // ── Mute ──────────────────────────────────────────────────────────
         case KeyCode::FN_M:
             state.muted = !state.muted;
@@ -358,30 +379,10 @@ static void audioTask(void* arg) {
             AudioEngine::clearEOF();
             if (xSemaphoreTake(g_state_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
                 AppState& s = g_state;
-
                 if (s.repeat == RepeatMode::ONE && s.current_track_path[0]) {
                     playPath(s.current_track_path);
                 } else {
-                    char next[128];
-                    bool found = s.shuffle
-                        ? g_lib.getRandomTrack(s.current_track_path, next, sizeof(next))
-                        : g_lib.getAdjacentTrack(s.current_track_path, 1, next, sizeof(next));
-
-                    if (found) {
-                        playPath(next);
-                    } else if (s.repeat == RepeatMode::ALL) {
-                        // Wrap around: find first audio file in current dir
-                        for (int i = 0; i < g_lib.count(); i++) {
-                            if (g_lib.isAudioFile(i)) {
-                                char first[128];
-                                g_lib.getFullPath(i, first, sizeof(first));
-                                playPath(first);
-                                break;
-                            }
-                        }
-                    } else {
-                        s.playback = PlaybackState::STOPPED;
-                    }
+                    s.playback = PlaybackState::STOPPED;
                 }
                 checkSleepTimer(s);
                 xSemaphoreGive(g_state_mutex);

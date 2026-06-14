@@ -13,4 +13,6 @@ public:
     static void saveMono(bool enabled);
     static void saveSleepTimer(uint8_t idx);
     static void saveScreenTimeout(uint8_t idx);
+    static void saveAnimType(uint8_t anim);
+    static void saveTheme(uint8_t theme);
 };

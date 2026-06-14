@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 #include "../config.h"
 #include "../battery/BatteryMonitor.h"
 
@@ -15,16 +16,102 @@ int      UIManager::s_lib_scroll  = 0;
 
 static constexpr int W      = 240;
 static constexpr int H      = 135;
-static constexpr int HINT_H = 9;   // reserved at the bottom for key hints
+static constexpr int HINT_H = 9;   // reserved at bottom for key hints
 
-static constexpr uint16_t COL_BG       = 0x0000;
-static constexpr uint16_t COL_FG       = 0xFFFF;
-static constexpr uint16_t COL_ACCENT   = 0x051F;
-static constexpr uint16_t COL_SELECTED = 0x3616;
-static constexpr uint16_t COL_DIM      = 0x7BEF;
-static constexpr uint16_t COL_GREEN    = 0x07E0;
-static constexpr uint16_t COL_RED      = 0xF800;
-static constexpr uint16_t COL_YELLOW   = 0xFFE0;
+// ── Fixed colors (not themed) ─────────────────────────────────────────────
+static constexpr uint16_t COL_BG     = 0x0000;
+static constexpr uint16_t COL_FG     = 0xFFFF;
+static constexpr uint16_t COL_GREEN  = 0x07E0;
+static constexpr uint16_t COL_RED    = 0xF800;
+static constexpr uint16_t COL_YELLOW = 0xFFE0;
+
+// ── Themed colors (updated at the start of every draw() call) ────────────
+static uint16_t COL_ACCENT   = 0x2104;
+static uint16_t COL_SELECTED = 0x3616;
+static uint16_t COL_DIM      = 0x7BEF;
+
+// ── Theme table: Gray / Red / Yellow ─────────────────────────────────────
+static const struct { uint16_t accent, selected, dim; } THEMES[3] = {
+    { 0x2104, 0x3616, 0x7BEF },  // Gray   (default)
+    { 0x6000, 0xA000, 0xD000 },  // Red
+    { 0x6300, 0x9480, 0xC600 },  // Yellow
+};
+
+static constexpr float PI_F = 3.14159265f;
+
+// ── Animation helpers (drawn inside the 100×121 left panel, cy ≈ 69) ─────
+
+static void drawVinyl(M5Canvas& cvs, int cx, int cy, bool playing, uint32_t ms) {
+    int r = 42;
+    cvs.fillCircle(cx, cy, r, COL_BG);
+    // Grooves
+    for (int g = r - 2; g > 18; g -= 3)
+        cvs.drawCircle(cx, cy, g, COL_ACCENT);
+    // Outer rim
+    cvs.drawCircle(cx, cy, r, COL_DIM);
+    // Center label
+    cvs.fillCircle(cx, cy, 16, COL_ACCENT);
+    // Rotating line on label when playing
+    if (playing) {
+        float a = (float)(ms % 3000) / 3000.0f * 2.0f * PI_F;
+        cvs.drawLine(cx, cy,
+                     cx + (int)(11.0f * cosf(a)),
+                     cy + (int)(11.0f * sinf(a)), COL_FG);
+    }
+    // Center hole
+    cvs.fillCircle(cx, cy, 3, COL_BG);
+    cvs.drawCircle(cx, cy, 3, COL_DIM);
+}
+
+static void drawCD(M5Canvas& cvs, int cx, int cy, bool playing, uint32_t ms) {
+    int r = 42;
+    // Disc body
+    cvs.fillCircle(cx, cy, r, COL_DIM);
+    cvs.fillCircle(cx, cy, r - 5, COL_ACCENT);
+    cvs.drawCircle(cx, cy, r,     COL_FG);
+    cvs.drawCircle(cx, cy, r - 5, COL_DIM);
+    // Rotating highlight
+    if (playing) {
+        float a = (float)(ms % 2000) / 2000.0f * 2.0f * PI_F;
+        int hx = cx + (int)(26.0f * cosf(a));
+        int hy = cy + (int)(26.0f * sinf(a));
+        cvs.fillRect(hx - 3, hy - 1, 7, 3, COL_FG);
+    }
+    // Hub and hole
+    cvs.fillCircle(cx, cy, 10, COL_SELECTED);
+    cvs.drawCircle(cx, cy, 10, COL_DIM);
+    cvs.fillCircle(cx, cy,  4, COL_BG);
+    cvs.drawCircle(cx, cy,  4, COL_DIM);
+}
+
+static void drawCassette(M5Canvas& cvs, int cx, int cy, bool playing, uint32_t ms) {
+    // Body
+    cvs.fillRoundRect(cx - 44, cy - 26, 88, 52, 5, COL_ACCENT);
+    cvs.drawRoundRect(cx - 44, cy - 26, 88, 52, 5, COL_DIM);
+    // Tape window
+    cvs.fillRect(cx - 26, cy - 11, 52, 22, COL_BG);
+    cvs.drawRect(cx - 26, cy - 11, 52, 22, COL_DIM);
+    // Bottom label line
+    cvs.drawFastHLine(cx - 36, cy + 17, 72, COL_DIM);
+    // Two reels
+    float angle = playing ? (float)(ms % 1000) / 1000.0f * 2.0f * PI_F : 0.0f;
+    for (int side = -1; side <= 1; side += 2) {
+        int rx = cx + side * 16, ry = cy;
+        cvs.fillCircle(rx, ry, 8, COL_SELECTED);
+        cvs.drawCircle(rx, ry, 8, COL_DIM);
+        cvs.fillCircle(rx, ry, 2, COL_BG);
+        if (playing) {
+            for (int sp = 0; sp < 3; sp++) {
+                float sa = angle + sp * (2.0f * PI_F / 3.0f);
+                cvs.drawLine(rx, ry,
+                             rx + (int)(6.0f * cosf(sa)),
+                             ry + (int)(6.0f * sinf(sa)), COL_FG);
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 
 void UIManager::begin() {
     M5.Display.setRotation(1);
@@ -39,6 +126,12 @@ void UIManager::begin() {
 void UIManager::draw(const AppState& state, const Library& lib,
                      const PlaylistManager& playlist) {
     (void)playlist;
+
+    // Apply theme
+    uint8_t tidx = state.theme_idx < 3 ? state.theme_idx : 0;
+    COL_ACCENT   = THEMES[tidx].accent;
+    COL_SELECTED = THEMES[tidx].selected;
+    COL_DIM      = THEMES[tidx].dim;
 
     if (!s_canvas_ok) {
         M5.Display.fillScreen(COL_BG);
@@ -64,12 +157,14 @@ void UIManager::draw(const AppState& state, const Library& lib,
     // Hint bar at bottom of every interactive screen
     switch (state.current_screen) {
         case Screen::NOW_PLAYING:
-            drawHintBar(",=prev /=next  Entr=pause  =/- vol  ESC=list");  break;
+            drawHintBar(",=prev /=next  Entr=pause  =/- vol  ESC=list");   break;
         case Screen::LIBRARY:
-            drawHintBar(";=up .=dn  Entr=open  ESC=back  =/- vol");       break;
+            drawHintBar(";=up .=dn  Entr=open  ESC=back  =/- vol");        break;
         case Screen::SLEEP_TIMER:
         case Screen::SCREEN_TIMEOUT:
-            drawHintBar(";=up .=dn  Entr=set  ESC=cancel");               break;
+            drawHintBar(";=up .=dn  Entr=set  ESC=cancel");                break;
+        case Screen::SETTINGS:
+            drawHintBar(";=up .=dn  Entr=change  ESC=back");               break;
         default: break;
     }
 
@@ -100,13 +195,13 @@ void UIManager::drawStatusBar(const AppState& state) {
     canvas.setTextDatum(textdatum_t::top_right);
     canvas.drawString(batt, W - 2, 2);
 
-    // Repeat / shuffle icons
+    // Repeat / shuffle / mode icons
     canvas.setTextDatum(textdatum_t::top_left);
     if (state.repeat == RepeatMode::ONE)      canvas.drawString("[1]", 2, 2);
     else if (state.repeat == RepeatMode::ALL) canvas.drawString("[A]", 2, 2);
-    if (state.shuffle)      canvas.drawString("~",    22, 2);
-    if (state.muted)        canvas.drawString("M",    32, 2);
-    if (state.mono)         canvas.drawString("MNO",  42, 2);
+    if (state.shuffle)       canvas.drawString("~",   22, 2);
+    if (state.muted)         canvas.drawString("M",   32, 2);
+    if (state.mono)          canvas.drawString("MNO", 42, 2);
     if (state.headphones_in) canvas.drawString("HP",  66, 2);
 
     canvas.setTextColor(COL_FG, COL_BG);
@@ -114,6 +209,8 @@ void UIManager::drawStatusBar(const AppState& state) {
 }
 
 void UIManager::drawHintBar(const char* text) {
+    // Clear over any content that extended into the hint area (e.g. left panel fill)
+    canvas.fillRect(0, H - HINT_H - 1, W, HINT_H + 1, COL_BG);
     canvas.drawFastHLine(0, H - HINT_H - 1, W, COL_DIM);
     canvas.setTextColor(COL_DIM, COL_BG);
     canvas.setTextDatum(textdatum_t::bottom_left);
@@ -125,17 +222,20 @@ void UIManager::drawHintBar(const char* text) {
 void UIManager::drawNowPlaying(const AppState& state, const Library& lib) {
     (void)lib;
 
-    // Left panel: music note placeholder
-    canvas.fillRect(0, 14, 100, H - 14, COL_ACCENT);
-    canvas.setTextDatum(textdatum_t::middle_center);
-    canvas.setTextSize(3);
-    canvas.drawString("=|>", 50, H/2 + 7);
-    canvas.setTextSize(1);
-    canvas.setTextDatum(textdatum_t::top_left);
+    bool playing = (state.playback == PlaybackState::PLAYING);
+    uint32_t ms  = millis();
 
-    // If album art was loaded, it was drawn directly to M5.Display underneath
-    // the canvas, so it shows through on the left 100 px when canvas has
-    // a transparent fill — we just leave the accent block instead.
+    // Left panel background
+    int panel_cy = 14 + (H - HINT_H - 1 - 14) / 2;  // vertical center of content area
+    canvas.fillRect(0, 14, 100, H - 14, COL_ACCENT);
+
+    // Animation
+    switch (state.anim_type) {
+        default:
+        case 0: drawVinyl   (canvas, 50, panel_cy, playing, ms); break;
+        case 1: drawCD      (canvas, 50, panel_cy, playing, ms); break;
+        case 2: drawCassette(canvas, 50, panel_cy, playing, ms); break;
+    }
 
     int tx = 104;
     int y  = 16;
@@ -160,11 +260,10 @@ void UIManager::drawNowPlaying(const AppState& state, const Library& lib) {
     }
     canvas.drawString(dir, tx, y); y += 11;
 
-    // Progress bar: pulsing dot bounces inside the bar.
-    // bar_w-4 keeps the 4-px dot fully within the bar (no off-screen overdraw).
+    // Progress bar — pulsing dot stays inside the bar (bar_w-3 keeps 4px dot within bounds)
     int bar_w = W - tx - 2;
     canvas.fillRect(tx, y, bar_w, 4, COL_DIM);
-    int dot_x = tx + (int)((millis() / 500) % (uint32_t)(bar_w - 3));
+    int dot_x = tx + (int)((ms / 500) % (uint32_t)(bar_w - 3));
     canvas.fillRect(dot_x, y, 4, 4, COL_FG);
     y += 8;
 
@@ -173,11 +272,12 @@ void UIManager::drawNowPlaying(const AppState& state, const Library& lib) {
     char time_str[12];
     snprintf(time_str, sizeof(time_str), "%lu:%02lu",
              (unsigned long)(pos_s / 60), (unsigned long)(pos_s % 60));
+    canvas.setTextColor(COL_DIM, COL_BG);
     canvas.drawString(time_str, tx, y); y += 11;
 
     // Play state
     const char* play_icon =
-        (state.playback == PlaybackState::PLAYING) ? "> PLAY"  :
+        (state.playback == PlaybackState::PLAYING) ? "> PLAY"   :
         (state.playback == PlaybackState::PAUSED)  ? "|| PAUSE" : "[] STOP";
     canvas.setTextColor(COL_GREEN, COL_BG);
     canvas.drawString(play_icon, tx, y); y += 11;
@@ -236,13 +336,11 @@ void UIManager::drawLibrary(const AppState& state, const Library& lib) {
 
     // Scroll indicator
     if (count > visible_rows) {
-        int total_h = H - 14;
+        int total_h = H - HINT_H - 1 - 14;
         int bar_h   = total_h * visible_rows / count;
-        int bar_y   = 14 + (total_h - bar_h) * s_lib_scroll /
-                      (count - visible_rows);
+        int bar_y   = 14 + (total_h - bar_h) * s_lib_scroll / (count - visible_rows);
         canvas.fillRect(W - 3, bar_y, 3, bar_h, COL_DIM);
     }
-
 }
 
 void UIManager::drawEQSettings(const AppState& state) {
@@ -291,6 +389,31 @@ void UIManager::drawSleepTimer(const AppState& state) {
     }
 }
 
+void UIManager::drawScreenTimeout(const AppState& state) {
+    static const char* OPTS[SCREEN_TIMEOUT_COUNT] = {
+        "Never",
+        "Dim 15s / Off 30s",
+        "Dim 30s / Off 60s",
+        "Dim 60s / Off 2 min",
+    };
+
+    canvas.setTextColor(COL_FG, COL_BG);
+    canvas.setTextDatum(textdatum_t::top_center);
+    canvas.drawString("SCREEN TIMEOUT", W/2, 16);
+    canvas.setTextDatum(textdatum_t::top_left);
+
+    for (int i = 0; i < SCREEN_TIMEOUT_COUNT; i++) {
+        bool sel = (i == state.screen_timeout_idx);
+        if (sel) {
+            canvas.fillRect(4, 30 + i * 14, W - 8, 13, COL_SELECTED);
+            canvas.setTextColor(COL_FG, COL_SELECTED);
+        } else {
+            canvas.setTextColor(COL_FG, COL_BG);
+        }
+        canvas.drawString(OPTS[i], 8, 32 + i * 14);
+    }
+}
+
 void UIManager::drawRecorder(const AppState& state, uint32_t elapsed_ms, uint8_t level) {
     (void)state;
     if (!s_canvas_ok) return;
@@ -318,47 +441,46 @@ void UIManager::drawRecorder(const AppState& state, uint32_t elapsed_ms, uint8_t
     canvas.pushSprite(0, 0);
 }
 
-void UIManager::drawScreenTimeout(const AppState& state) {
-    static const char* OPTS[SCREEN_TIMEOUT_COUNT] = {
-        "Never",
-        "Dim 15s / Off 30s",
-        "Dim 30s / Off 60s",
-        "Dim 60s / Off 2 min",
-    };
-
-    canvas.setTextColor(COL_FG, COL_BG);
-    canvas.setTextDatum(textdatum_t::top_center);
-    canvas.drawString("SCREEN TIMEOUT", W/2, 16);
-    canvas.setTextDatum(textdatum_t::top_left);
-
-    for (int i = 0; i < SCREEN_TIMEOUT_COUNT; i++) {
-        bool sel = (i == state.screen_timeout_idx);
-        if (sel) {
-            canvas.fillRect(4, 30 + i * 14, W - 8, 13, COL_SELECTED);
-            canvas.setTextColor(COL_FG, COL_SELECTED);
-        } else {
-            canvas.setTextColor(COL_FG, COL_BG);
-        }
-        canvas.drawString(OPTS[i], 8, 32 + i * 14);
-    }
-}
-
 void UIManager::drawSettings(const AppState& state) {
+    static const char* ANIM_NAMES[]  = { "Vinyl", "CD", "Cassette" };
+    static const char* THEME_NAMES[] = { "Gray",  "Red", "Yellow"  };
+
     canvas.setTextColor(COL_FG, COL_BG);
     canvas.setTextDatum(textdatum_t::top_center);
     canvas.drawString("SETTINGS", W/2, 16);
     canvas.setTextDatum(textdatum_t::top_left);
 
-    char line[40];
+    struct { const char* label; const char* value; } items[] = {
+        { "Animation", ANIM_NAMES [state.anim_type  < 3 ? state.anim_type  : 0] },
+        { "Theme",     THEME_NAMES[state.theme_idx  < 3 ? state.theme_idx  : 0] },
+    };
+    static constexpr int N_ITEMS = (int)(sizeof(items) / sizeof(items[0]));
+
     int y = 32;
-    snprintf(line, sizeof(line), "FullSound: %s",      state.fullsound ? "ON" : "OFF");     canvas.drawString(line, 4, y); y += 14;
-    snprintf(line, sizeof(line), "Output:    %s",      state.mono      ? "Mono" : "Stereo"); canvas.drawString(line, 4, y); y += 14;
-    snprintf(line, sizeof(line), "Shuffle:   %s",      state.shuffle   ? "ON" : "OFF");      canvas.drawString(line, 4, y); y += 14;
-    const char* rm = (state.repeat == RepeatMode::OFF) ? "Off" :
-                     (state.repeat == RepeatMode::ONE) ? "One" : "All";
-    snprintf(line, sizeof(line), "Repeat:    %s", rm);                                        canvas.drawString(line, 4, y); y += 14;
-    snprintf(line, sizeof(line), "Volume:    %d/30",   state.volume);                         canvas.drawString(line, 4, y); y += 14;
-    snprintf(line, sizeof(line), "Battery:   %d%% (%s)", state.battery_pct, state.charging ? "CHG" : "DIS"); canvas.drawString(line, 4, y);
+    for (int i = 0; i < N_ITEMS; i++) {
+        bool sel = (i == state.settings_cursor);
+        if (sel) {
+            canvas.fillRect(4, y - 1, W - 8, 13, COL_SELECTED);
+            canvas.setTextColor(COL_FG, COL_SELECTED);
+        } else {
+            canvas.setTextColor(COL_FG, COL_BG);
+        }
+        char line[40];
+        snprintf(line, sizeof(line), "%-12s %s", items[i].label, items[i].value);
+        canvas.drawString(line, 8, y + 1);
+        y += 16;
+    }
+
+    // Read-only info below
+    canvas.setTextColor(COL_DIM, COL_BG);
+    y += 4;
+    char info[40];
+    snprintf(info, sizeof(info), "Vol %-3d  %s", state.volume,
+             EQ_PRESET_NAMES[(uint8_t)state.eq_preset]);
+    canvas.drawString(info, 8, y); y += 13;
+    snprintf(info, sizeof(info), "Battery %d%%  %s",
+             state.battery_pct, state.charging ? "CHG" : "");
+    canvas.drawString(info, 8, y);
 }
 
 void UIManager::loadAlbumArt(const char* track_path, bool has_embedded) {

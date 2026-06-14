@@ -42,7 +42,7 @@ enum class KeyCode : uint8_t {
     ENTER, ESC,
     PLUS, MINUS,
     FN_LEFT, FN_RIGHT,
-    FN_S, FN_R, FN_E, FN_F, FN_T, FN_M, FN_O, FN_REC, FN_D,
+    FN_S, FN_R, FN_E, FN_F, FN_T, FN_M, FN_O, FN_REC, FN_D, FN_G,
     OK_LONG,
     CHAR_A = 0x40,  // printable characters start here
 };
@@ -88,4 +88,7 @@ struct AppState {
     char          current_track_name[48];  // display name (filename, no ext)
     uint32_t      track_pos_ms;    // current playback position
     uint8_t       screen_timeout_idx;  // index into SCREEN_TIMEOUT_SECS
+    uint8_t       anim_type;           // 0=Vinyl 1=CD 2=Cassette
+    uint8_t       theme_idx;           // 0=Gray 1=Red 2=Yellow
+    uint8_t       settings_cursor;     // cursor position inside Settings screen
 };
