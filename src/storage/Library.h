@@ -8,7 +8,7 @@ public:
     static constexpr int MAX_ENTRIES = 64;
 
     struct Entry {
-        char name[56];   // filename only (no path prefix)
+        char name[128];  // filename only (no path prefix)
         bool is_dir;
     };
 
