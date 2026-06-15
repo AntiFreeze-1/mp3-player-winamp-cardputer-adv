@@ -57,8 +57,13 @@ private:
     static bool         s_muted;
     static bool         s_eof;
     static uint32_t     s_position_ms;
+    static uint32_t     s_computed_duration_ms;  // from file header probe
     static char         s_current_path[128];
 
     // Map software volume 0-30 to ES8311 DAC value
     static uint8_t volToI2S(uint8_t vol);
+
+    // Read sample rate and duration directly from file header (before connecttoFS).
+    // Returns true if at least the sample rate was determined.
+    static bool probeFile(const char* path, float* out_sr, uint32_t* out_duration_ms);
 };

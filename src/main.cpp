@@ -497,24 +497,27 @@ static void uiTask(void* arg) {
         M5.update();  // refresh BtnA (G0) state
 
         KeyEvent ev;
-        static uint8_t s_brightness = 0;  // force setBrightness on first frame
+        static uint8_t s_brightness      = 0;     // force setBrightness on first frame
+        static bool    s_display_forced_off = false; // G0 manually blanked the screen
 
         // G0 (BOOT button / BtnA): manual display on/off toggle.
         if (M5.BtnA.wasPressed()) {
             if (s_brightness == 0) {
+                s_display_forced_off = false;
                 M5.Display.setBrightness(SCREEN_BRIGHTNESS_NORMAL);
                 s_brightness       = SCREEN_BRIGHTNESS_NORMAL;
                 g_last_activity_ms = millis();
             } else {
+                s_display_forced_off = true;
                 M5.Display.setBrightness(0);
                 s_brightness = 0;
             }
         }
 
         while (xQueueReceive(g_key_queue, &ev, 0) == pdTRUE) {
-            // Any key event wakes the screen — LEDC duty may silently reset
-            // to 0 after sleep and needs explicit re-assertion.
-            if (s_brightness != SCREEN_BRIGHTNESS_NORMAL) {
+            // Any key event wakes the screen from inactivity sleep.
+            // Keyboard input does NOT override a deliberate G0 manual-off.
+            if (!s_display_forced_off && s_brightness != SCREEN_BRIGHTNESS_NORMAL) {
                 M5.Display.setBrightness(SCREEN_BRIGHTNESS_NORMAL);
                 s_brightness = SCREEN_BRIGHTNESS_NORMAL;
             }
@@ -522,6 +525,13 @@ static void uiTask(void* arg) {
             // and spurious TCA8418 releases (I2S EMI) must not extend the timer.
             if (ev.pressed) {
                 g_last_activity_ms = millis();
+                // A deliberate keypress also clears the forced-off state so
+                // the user can wake the screen by typing after using G0 to blank it.
+                s_display_forced_off = false;
+                if (s_brightness != SCREEN_BRIGHTNESS_NORMAL) {
+                    M5.Display.setBrightness(SCREEN_BRIGHTNESS_NORMAL);
+                    s_brightness = SCREEN_BRIGHTNESS_NORMAL;
+                }
             }
             if (xSemaphoreTake(g_state_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
                 handleKey(ev, g_state);
@@ -554,20 +564,21 @@ static void uiTask(void* arg) {
             UIManager::draw(snap, g_lib, g_playlist);
         }
 
-        // Screen dim / off based on inactivity
-        {
+        // Screen dim / off based on inactivity (skipped when G0 has manually blanked display)
+        if (!s_display_forced_off) {
             uint32_t idle = millis() - g_last_activity_ms;
             uint8_t tidx  = snap.screen_timeout_idx;
             uint8_t want  = SCREEN_BRIGHTNESS_NORMAL;
             if (tidx > 0) {
                 uint32_t dim_ms = (uint32_t)SCREEN_TIMEOUT_SECS[tidx][0] * 1000;
                 uint32_t off_ms = (uint32_t)SCREEN_TIMEOUT_SECS[tidx][1] * 1000;
-                if (off_ms > 0 && idle >= off_ms)    want = 0;
+                if (off_ms > 0 && idle >= off_ms)      want = 0;
                 else if (dim_ms > 0 && idle >= dim_ms) want = SCREEN_BRIGHTNESS_DIM;
             }
-            // Always re-apply to prevent LEDC duty from silently staying at 0.
-            M5.Display.setBrightness(want);
-            s_brightness = want;
+            if (want != s_brightness) {
+                M5.Display.setBrightness(want);
+                s_brightness = want;
+            }
         }
 
         vTaskDelay(pdMS_TO_TICKS(33));
